@@ -1717,3 +1717,13 @@ export class ToolBridge {
 // ═══════════════════════════════════════════════════════════════════
 
 export type { IntentType, ParsedIntent, SeedDomain, UniversalSeed, Gene, GeneMap };
+
+// ═══════════════════════════════════════════════════════════════════
+// Cloud LLM Providers
+// ═══════════════════════════════════════════════════════════════════
+
+export { ClaudeProvider } from './providers/claude.js';
+export { OpenAIProvider } from './providers/openai.js';
+export { GeminiProvider } from './providers/gemini.js';
+export { createProvider, detectAvailableProviders, getProviderConfig } from './providers/config.js';
+export type { ProviderConfig } from './providers/config.js';

@@ -17,6 +17,9 @@
     "dev:cli": "pnpm --filter @paradigm/cli dev",
     "dev:studio": "pnpm --filter @paradigm/studio dev"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

@@ -890,3 +890,8 @@ class SeedRepositoryWithEvents extends SeedRepository {
 // ─────────────────────────────────────────────
 
 export type { EvolutionLogEntry as EvolutionEntry };
+
+export { SqliteAdapter } from './sqlite-adapter.js';
+export type { AsyncStorageAdapter } from './indexeddb-adapter.js';
+export { IndexedDBAdapter } from './indexeddb-adapter.js';
+export { createStorageAdapter } from './factory.js';
