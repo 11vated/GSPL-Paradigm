@@ -710,6 +710,12 @@ importers:
       '@paradigm/events':
         specifier: workspace:*
         version: link:../events
+      '@paradigm/evolution':
+        specifier: workspace:*
+        version: link:../evolution
+      '@paradigm/export':
+        specifier: workspace:*
+        version: link:../export
       '@paradigm/forge':
         specifier: workspace:*
         version: link:../forge
@@ -719,6 +725,9 @@ importers:
       '@paradigm/seed':
         specifier: workspace:*
         version: link:../seed
+      '@paradigm/store':
+        specifier: workspace:*
+        version: link:../store
       '@paradigm/types':
         specifier: workspace:*
         version: link:../types

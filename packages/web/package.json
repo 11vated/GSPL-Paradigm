@@ -19,9 +19,12 @@
   "dependencies": {
     "@paradigm/agent": "workspace:*",
     "@paradigm/events": "workspace:*",
+    "@paradigm/evolution": "workspace:*",
+    "@paradigm/export": "workspace:*",
     "@paradigm/forge": "workspace:*",
     "@paradigm/rng": "workspace:*",
     "@paradigm/seed": "workspace:*",
+    "@paradigm/store": "workspace:*",
     "@paradigm/types": "workspace:*"
   },
   "devDependencies": {
