@@ -1,0 +1,23 @@
+{
+  "name": "GSPL Paradigm",
+  "short_name": "GSPL",
+  "description": "The Living World Compiler — Create, evolve, and forge seeds into living worlds",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#22c55e",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["developer", "games", "creativity"]
+}

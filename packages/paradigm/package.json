@@ -1,0 +1,27 @@
+{
+  "name": "@paradigm/paradigm",
+  "version": "1.0.0",
+  "description": "GSPL Paradigm — unified entry point for the Living World Compiler",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "scripts": { "build": "tsc", "test": "echo 'Meta-package — no tests'", "typecheck": "tsc --noEmit", "clean": "rm -rf dist" },
+  "dependencies": {
+    "@paradigm/types": "workspace:*",
+    "@paradigm/rng": "workspace:*",
+    "@paradigm/events": "workspace:*",
+    "@paradigm/seed": "workspace:*",
+    "@paradigm/lang": "workspace:*",
+    "@paradigm/runtime": "workspace:*",
+    "@paradigm/evolution": "workspace:*",
+    "@paradigm/store": "workspace:*",
+    "@paradigm/forge": "workspace:*",
+    "@paradigm/export": "workspace:*",
+    "@paradigm/llm": "workspace:*",
+    "@paradigm/web": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
