@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Forest Guardian — Arcade</title>
+  <style>
+    body { margin: 0; background: #0a0a0a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: monospace; color: #fff; }
+    canvas { border: 2px solid #6b2e2e; display: block; }
+    #ui { width: 480px; display: flex; justify-content: space-between; padding: 0.4rem 0; font-size: 0.85rem; }
+    #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,0.8); padding: 1rem 2rem; border-radius: 8px; text-align: center; display: none; }
+  </style>
+</head>
+<body>
+  <div id="ui"><span>Score: <b id="score">0</b></span><span>Lives: <b id="lives">3</b></span></div>
+  <canvas id="c" width="480" height="360"></canvas>
+  <div id="msg"><h2 id="msgText">Game Over</h2><p>Press Space to restart</p></div>
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const msgEl = document.getElementById('msg');
+    const msgText = document.getElementById('msgText');
+    const W = 480, H = 360;
+    const PLAYER_SPEED = 5.00;
+    const ENEMY_SPEED = 3.00;
+    const ENEMY_INTERVAL = 854;
+    let state = 'playing';
+    let score = 0, lives = 3;
+    let player = { x: W/2, y: H - 40, w: 30, h: 20, vx: 0 };
+    let bullets = [], enemies = [], particles = [];
+    let keys = {};
+    let lastEnemy = 0, lastShot = 0;
+    document.addEventListener('keydown', e => {
+      keys[e.key] = true;
+      if (e.key === ' ') { e.preventDefault(); if (state === 'playing') shoot(); else if (state === 'over') restart(); }
+    });
+    document.addEventListener('keyup', e => { keys[e.key] = false; });
+    function shoot() {
+      const now = Date.now();
+      if (now - lastShot < 200) return;
+      lastShot = now;
+      bullets.push({ x: player.x + player.w/2 - 2, y: player.y, w: 4, h: 10, vy: -8 });
+    }
+    function spawnEnemy() {
+      const ex = Math.random() * (W - 24);
+      enemies.push({ x: ex, y: -24, w: 24, h: 24, vy: ENEMY_SPEED, hp: 1 });
+    }
+    function spawnParticles(x, y, color) {
+      for (let i = 0; i < 8; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 3 + 1;
+        particles.push({ x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, life: 1, color });
+      }
+    }
+    function collides(a, b) {
+      return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+    }
+    function restart() {
+      score = 0; lives = 3; bullets = []; enemies = []; particles = [];
+      player.x = W/2; player.y = H-40; state = 'playing';
+      msgEl.style.display = 'none';
+      scoreEl.textContent = '0'; livesEl.textContent = '3';
+    }
+    function update(now) {
+      if (state !== 'playing') return;
+      if (keys['ArrowLeft'] || keys['a']) player.x = Math.max(0, player.x - PLAYER_SPEED);
+      if (keys['ArrowRight'] || keys['d']) player.x = Math.min(W - player.w, player.x + PLAYER_SPEED);
+      bullets = bullets.filter(b => { b.y += b.vy; return b.y > -b.h; });
+      enemies = enemies.filter(e => { e.y += e.vy; return e.y < H + e.h; });
+      if (now - lastEnemy > ENEMY_INTERVAL) { spawnEnemy(); lastEnemy = now; }
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          if (collides(bullets[i], enemies[j])) {
+            spawnParticles(enemies[j].x + 12, enemies[j].y + 12, '#2e6b6b');
+            bullets.splice(i, 1); enemies.splice(j, 1);
+            score++; scoreEl.textContent = score; break;
+          }
+        }
+      }
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        if (collides(player, enemies[j])) {
+          spawnParticles(player.x + 15, player.y + 10, '#ff4444');
+          enemies.splice(j, 1); lives--;
+          livesEl.textContent = lives;
+          if (lives <= 0) { state = 'over'; msgEl.style.display = 'block'; msgText.textContent = 'Score: ' + score; }
+        }
+      }
+      particles = particles.filter(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.06; return p.life > 0; });
+    }
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, W, H);
+      if (state === 'playing' || state === 'over') {
+        ctx.fillStyle = '#6b2e2e';
+        ctx.beginPath(); ctx.moveTo(player.x, player.y+player.h); ctx.lineTo(player.x+player.w/2, player.y); ctx.lineTo(player.x+player.w, player.y+player.h); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffee44';
+        bullets.forEach(b => { ctx.fillRect(b.x, b.y, b.w, b.h); });
+        ctx.fillStyle = '#2e6b6b';
+        enemies.forEach(e => { ctx.fillRect(e.x, e.y, e.w, e.h); });
+        particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x-2, p.y-2, 4, 4); });
+        ctx.globalAlpha = 1;
+      }
+    }
+    function loop(now) { update(now); draw(); requestAnimationFrame(loop); }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

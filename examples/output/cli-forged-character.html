@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Forest Guardian — Character Sheet</title>
+  <style>
+    body { font-family: 'Georgia', serif; background: #f8f5ee; color: #2a2020; max-width: 700px; margin: 0 auto; padding: 2rem; }
+    h1 { font-size: 2rem; border-bottom: 3px solid #6b2e2e; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+    .header-meta { display: flex; gap: 1.5rem; margin-bottom: 2rem; font-size: 0.9rem; opacity: 0.7; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    h2 { font-size: 1.1rem; color: #6b2e2e; border-bottom: 1px solid #6b2e2e; padding-bottom: 0.25rem; margin-bottom: 1rem; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+    .stat { background: #ece8df; border-radius: 8px; padding: 0.75rem; text-align: center; border: 1px solid #856647; }
+    .stat-name { display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.65; }
+    .stat-val { display: block; font-size: 1.8rem; font-weight: 700; color: #6b2e2e; }
+    .mod { display: block; font-size: 0.75rem; color: #2e6b6b; }
+    ul { padding-left: 1.5rem; line-height: 1.8; }
+    .hash { font-family: monospace; font-size: 0.7rem; opacity: 0.4; margin-top: 2rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Forest Guardian</h1>
+  <div class="header-meta">
+    <span>Domain: organism</span>
+    <span>Generation: 0</span>
+    <span>Class: earth</span>
+  </div>
+  <div class="grid">
+    <div>
+      <h2>Ability Scores</h2>
+      <div class="stats">
+        <div class="stat"><span class="stat-name">Strength</span><span class="stat-val">20</span><span class="mod">+5</span></div>
+        <div class="stat"><span class="stat-name">Dexterity</span><span class="stat-val">20</span><span class="mod">+5</span></div>
+        <div class="stat"><span class="stat-name">Constitution</span><span class="stat-val">19</span><span class="mod">+4</span></div>
+        <div class="stat"><span class="stat-name">Intelligence</span><span class="stat-val">7</span><span class="mod">-2</span></div>
+        <div class="stat"><span class="stat-name">Wisdom</span><span class="stat-val">4</span><span class="mod">-3</span></div>
+        <div class="stat"><span class="stat-name">Charisma</span><span class="stat-val">2</span><span class="mod">-4</span></div>
+      </div>
+    </div>
+    <div>
+      <h2>Special Abilities</h2>
+      <ul>
+          <li>earth</li>
+      </ul>
+      <h2 style="margin-top:1.5rem">Traits</h2>
+      <ul>
+        <li>Seed Hash: <code>94686251</code></li>
+        <li>Breeding: Primordial</li>
+        <li>Parents: None</li>
+      </ul>
+    </div>
+  </div>
+  <p class="hash">94686251</p>
+</body>
+</html>
