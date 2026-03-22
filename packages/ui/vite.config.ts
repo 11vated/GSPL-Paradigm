@@ -15,5 +15,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          three: ['three', '@react-three/fiber', '@react-three/drei'],
+          react: ['react', 'react-dom'],
+        },
+      },
+    },
   },
 });
