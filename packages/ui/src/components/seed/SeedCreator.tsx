@@ -33,7 +33,7 @@ export function SeedCreator({ onSeedCreated }: SeedCreatorProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/seeds', {
+      const response = await fetch('/api/seed/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), domain, genes: {} }),
@@ -46,8 +46,8 @@ export function SeedCreator({ onSeedCreated }: SeedCreatorProps) {
         );
       }
 
-      const seed = (await response.json()) as UniversalSeed;
-      onSeedCreated(seed);
+      const data = (await response.json()) as { seed: UniversalSeed };
+      onSeedCreated(data.seed);
       setName('');
     } catch (err: unknown) {
       const message =

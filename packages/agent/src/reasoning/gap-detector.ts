@@ -63,6 +63,65 @@ const CRITICAL_GENES: Readonly<Record<string, readonly string[]>> = {
   plant:    ['growth_rate', 'height'],
   robot:    ['processing', 'energy', 'durability'],
   material: ['hardness', 'density'],
+
+  // Digital/Creative
+  code:              ['maintainability', 'test_coverage'],
+  shader:            ['performance', 'visual_quality'],
+  render:            ['quality', 'fps_target'],
+  'animation-visual': ['frame_count', 'fps'],
+  texture:           ['resolution', 'format'],
+  logo:              ['scalability', 'memorability'],
+  brand:             ['consistency', 'differentiation'],
+  ui:                ['usability', 'accessibility'],
+  interaction:       ['latency', 'feedback_quality'],
+  aesthetic:         ['harmony', 'contrast'],
+  web:               ['lighthouse_score', 'load_time'],
+  compression:       ['ratio', 'speed'],
+
+  // Narrative/Experiential
+  narrative:         ['coherence', 'pacing'],
+  cinematic:         ['visual_storytelling', 'pacing'],
+  emotion:           ['valence', 'arousal'],
+  perception:        ['visual_acuity', 'attention'],
+  game:              ['fun_factor', 'difficulty'],
+  simulation:        ['accuracy', 'timestep'],
+
+  // Audio/Music
+  sound:             ['frequency', 'amplitude'],
+  music:             ['tempo', 'complexity'],
+  audio:             ['sample_rate', 'bit_depth'],
+
+  // Scientific/Abstract
+  neural:            ['layers', 'learning_rate'],
+  intelligence:      ['reasoning', 'adaptability'],
+  quantum:           ['qubits', 'gate_fidelity'],
+  molecular:         ['atoms', 'stability'],
+  pattern:           ['regularity', 'complexity'],
+  network:           ['nodes', 'topology'],
+  language:          ['vocabulary_size', 'grammar_complexity'],
+  strategy:          ['risk', 'reward'],
+
+  // Infrastructure/Systems
+  schedule:          ['duration', 'priority'],
+  rule:              ['strictness', 'enforcement'],
+  constraint:        ['weight', 'type'],
+  ecosystem:         ['biodiversity', 'stability'],
+  infrastructure:    ['reliability', 'scalability'],
+  product:           ['market_fit', 'usability'],
+  city:              ['infrastructure', 'livability'],
+
+  // Data/Security
+  'security-threat': ['severity', 'impact'],
+  intrusion:         ['stealth', 'technique'],
+  forensics:         ['evidence_quality', 'timeline_coverage'],
+  'memory-store':    ['capacity', 'durability'],
+
+  // Physical/Natural
+  particle:          ['mass', 'interaction'],
+  fluid:             ['viscosity', 'density'],
+  crystal:           ['hardness', 'symmetry'],
+  'seed-intelligence': ['awareness', 'reasoning'],
+  void:              ['entropy', 'stability'],
 };
 
 /**
@@ -110,6 +169,71 @@ const DOMAIN_ROLES: Readonly<Record<string, readonly RoleCoverage[]>> = {
     { role: 'melee', requiredGenes: { damage: { min: 40, max: 100 }, range: { min: 0, max: 20 } } },
     { role: 'ranged', requiredGenes: { range: { min: 50, max: 100 }, damage: { min: 20, max: 100 } } },
     { role: 'heavy', requiredGenes: { damage: { min: 70, max: 100 }, weight: { min: 60, max: 100 } } },
+  ],
+
+  // Code archetypes
+  code: [
+    { role: 'architect', requiredGenes: { maintainability: { min: 70, max: 100 }, complexity: { min: 40, max: 100 } } },
+    { role: 'optimizer', requiredGenes: { performance: { min: 80, max: 100 } } },
+    { role: 'debugger', requiredGenes: { test_coverage: { min: 60, max: 100 }, maintainability: { min: 50, max: 100 } } },
+    { role: 'prototyper', requiredGenes: { performance: { min: 40, max: 100 } } },
+    { role: 'documenter', requiredGenes: { maintainability: { min: 80, max: 100 } } },
+    { role: 'tester', requiredGenes: { test_coverage: { min: 80, max: 100 } } },
+  ],
+
+  // Narrative archetypes
+  narrative: [
+    { role: 'worldbuilder', requiredGenes: { coherence: { min: 60, max: 100 }, word_count: { min: 50000, max: 200000 } } },
+    { role: 'character_writer', requiredGenes: { character_depth: { min: 70, max: 100 } } },
+    { role: 'plotter', requiredGenes: { tension: { min: 60, max: 100 }, pacing: { min: 50, max: 100 } } },
+    { role: 'dialogue_master', requiredGenes: { character_depth: { min: 50, max: 100 }, pacing: { min: 60, max: 100 } } },
+    { role: 'editor', requiredGenes: { coherence: { min: 70, max: 100 } } },
+  ],
+
+  // Game archetypes
+  game: [
+    { role: 'level_designer', requiredGenes: { fun_factor: { min: 50, max: 100 }, difficulty: { min: 30, max: 70 } } },
+    { role: 'balance_tuner', requiredGenes: { fun_factor: { min: 60, max: 100 }, difficulty: { min: 40, max: 60 } } },
+    { role: 'narrative_designer', requiredGenes: { fun_factor: { min: 40, max: 100 } } },
+    { role: 'systems_designer', requiredGenes: { replayability: { min: 60, max: 100 } } },
+    { role: 'ui_artist', requiredGenes: { fun_factor: { min: 50, max: 100 } } },
+  ],
+
+  // UI archetypes
+  ui: [
+    { role: 'designer', requiredGenes: { usability: { min: 60, max: 100 } } },
+    { role: 'accessibility_expert', requiredGenes: { accessibility: { min: 80, max: 100 } } },
+    { role: 'animator', requiredGenes: { responsiveness: { min: 60, max: 100 } } },
+    { role: 'responsive_specialist', requiredGenes: { responsiveness: { min: 80, max: 100 } } },
+  ],
+
+  // Audio archetypes
+  audio: [
+    { role: 'composer', requiredGenes: { dynamic_range: { min: 50, max: 100 } } },
+    { role: 'sound_designer', requiredGenes: { sample_rate: { min: 44100, max: 192000 } } },
+    { role: 'mixer', requiredGenes: { channels: { min: 2, max: 8 }, dynamic_range: { min: 60, max: 100 } } },
+    { role: 'foley_artist', requiredGenes: { sample_rate: { min: 44100, max: 192000 } } },
+  ],
+
+  // Shader archetypes
+  shader: [
+    { role: 'vfx_artist', requiredGenes: { visual_quality: { min: 70, max: 100 } } },
+    { role: 'lighting_specialist', requiredGenes: { visual_quality: { min: 60, max: 100 }, performance: { min: 40, max: 100 } } },
+    { role: 'material_designer', requiredGenes: { visual_quality: { min: 50, max: 100 } } },
+  ],
+
+  // Network archetypes
+  network: [
+    { role: 'architect', requiredGenes: { nodes: { min: 100, max: 1000000 } } },
+    { role: 'security_analyst', requiredGenes: { latency: { min: 0, max: 100 } } },
+    { role: 'performance_engineer', requiredGenes: { latency: { min: 0, max: 50 } } },
+  ],
+
+  // Simulation archetypes
+  simulation: [
+    { role: 'modeler', requiredGenes: { accuracy: { min: 70, max: 100 } } },
+    { role: 'validator', requiredGenes: { accuracy: { min: 80, max: 100 } } },
+    { role: 'optimizer', requiredGenes: { entity_count: { min: 1000, max: 100000 } } },
   ],
 };
 

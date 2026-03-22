@@ -97,20 +97,13 @@ export function EvolutionPanel({ seeds, onSeedsUpdate }: EvolutionPanelProps) {
     setCurrentGen(0);
 
     try {
-      const response = await fetch('/api/evolution', {
+      const response = await fetch('/api/evolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          seedHashes: seeds.map((s) => s.$hash),
-          config: {
-            populationSize: config.populationSize,
-            generations: config.generations,
-            mutationRate: config.mutationRate,
-            crossoverRate: 0.7,
-            elitismCount: 2,
-            selectionStrategy: config.selectionStrategy,
-            crossoverStrategy: 'uniform' as const,
-          },
+          generations: config.generations,
+          populationSize: config.populationSize,
+          mutationRate: config.mutationRate,
         }),
       });
 
@@ -122,13 +115,15 @@ export function EvolutionPanel({ seeds, onSeedsUpdate }: EvolutionPanelProps) {
       }
 
       const result = (await response.json()) as {
-        seeds: UniversalSeed[];
-        history: GenerationRecord[];
+        generations: GenerationRecord[];
+        finalPopulation: UniversalSeed[];
+        bestFitness: number;
+        averageFitness: number;
       };
 
-      setHistory(result.history);
-      setCurrentGen(result.history.length);
-      onSeedsUpdate(result.seeds);
+      setHistory(result.generations);
+      setCurrentGen(result.generations.length);
+      onSeedsUpdate(result.finalPopulation);
     } catch (err: unknown) {
       const message =
         err instanceof Error

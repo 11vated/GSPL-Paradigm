@@ -9,6 +9,8 @@
  * @packageDocumentation
  */
 
+import type { AgentToolResult } from '../tools/seed-tools.js';
+
 /** Status of a single step in the agent's plan. */
 export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 
@@ -71,6 +73,15 @@ export interface ProgressReport {
   /** Number of skipped steps. */
   skipped: number;
 }
+
+/**
+ * Executor function signature for tool invocation.
+ * Accepts an operation name and arguments, returns the tool's result.
+ */
+export type ToolExecutor = (
+  operation: string,
+  args: Record<string, unknown>,
+) => Promise<AgentToolResult>;
 
 /**
  * Autonomous Mode — agent operates independently toward a goal.
@@ -145,7 +156,7 @@ export class AutonomousMode {
           index: 2,
           description: 'Execute primary action toward goal',
           operation: 'seed_create',
-          args: { name: 'goal-seed', domain: 'system' },
+          args: { name: 'goal-seed', domain: 'organism' },
           status: 'pending',
           dependsOn: [1],
         },
@@ -191,15 +202,21 @@ export class AutonomousMode {
   }
 
   /**
-   * Execute the next pending step in the plan.
+   * Execute the next pending step in the plan via the provided executor.
    *
-   * Checks dependencies, marks the step as in-progress, executes it
-   * (stub — real execution connects to WebEngine), and records the result.
+   * Checks dependencies, marks the step as in-progress, invokes the tool
+   * through the executor function, and records the result. If a step fails,
+   * it is marked as failed and dependent steps are skipped.
    *
+   * @param executor - Function that routes operation names to tool execution.
+   *   Receives the operation name (e.g. "seed_create") and the step's args.
+   *   Returns the AgentToolResult from that tool's execute() method.
    * @returns The result of executing the step
-   * @throws Error if no plan exists or all steps are complete
+   * @throws Error if no plan exists
    */
-  executeNext(): StepResult {
+  async executeNext(
+    executor: ToolExecutor,
+  ): Promise<StepResult> {
     if (!this.plan) {
       throw new Error('No plan exists. Call plan_goal() or setPlan() first.');
     }
@@ -235,13 +252,40 @@ export class AutonomousMode {
     // Mark as in progress
     nextStep.status = 'in_progress';
 
-    // Stub execution — real implementation connects to tool execution
-    nextStep.status = 'completed';
-    nextStep.result = {
-      description:
-        `Step ${String(nextStep.index)} ("${nextStep.description}") executed via ` +
-        `${nextStep.operation}. Pending WebEngine connection for real execution.`,
-    };
+    // Execute via the injected executor
+    try {
+      // Enrich args with data from previous steps when needed
+      const enrichedArgs = this.enrichArgs(nextStep);
+      const toolResult = await executor(nextStep.operation, enrichedArgs);
+
+      if (toolResult.success) {
+        nextStep.status = 'completed';
+        nextStep.result = toolResult.data;
+      } else {
+        nextStep.status = 'failed';
+        nextStep.error = toolResult.error ?? 'Tool returned success: false with no error message.';
+
+        // Skip dependent steps
+        for (const s of this.plan.steps) {
+          if (s.dependsOn.includes(nextStep.index) && s.status === 'pending') {
+            s.status = 'skipped';
+            s.error = `Skipped: dependency step ${String(nextStep.index)} failed.`;
+          }
+        }
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      nextStep.status = 'failed';
+      nextStep.error = `Execution error: ${message}`;
+
+      // Skip dependent steps
+      for (const s of this.plan.steps) {
+        if (s.dependsOn.includes(nextStep.index) && s.status === 'pending') {
+          s.status = 'skipped';
+          s.error = `Skipped: dependency step ${String(nextStep.index)} failed.`;
+        }
+      }
+    }
 
     this.currentStepIndex = nextStep.index + 1;
 
@@ -249,8 +293,9 @@ export class AutonomousMode {
 
     return {
       stepIndex: nextStep.index,
-      success: true,
+      success: nextStep.status === 'completed',
       data: nextStep.result,
+      error: nextStep.error,
       continueExecution: hasMore,
     };
   }
@@ -333,6 +378,36 @@ export class AutonomousMode {
         }
       }
     }
+  }
+
+  /**
+   * Enrich step arguments with data from completed dependency steps.
+   *
+   * For example, if step 3 depends on step 2 (seed_create) and step 3 is
+   * analyze_seed, we can inject the hash from step 2's result.
+   *
+   * @param step - The step whose args should be enriched.
+   * @returns Enriched args with data from dependency results.
+   */
+  private enrichArgs(step: PlanStep): Record<string, unknown> {
+    const args = { ...step.args };
+
+    // If this step needs a hash but doesn't have one, try to get it from dependency results
+    if (!args['hash'] && !args['seedHash']) {
+      for (const depIndex of step.dependsOn) {
+        const depStep = this.plan?.steps[depIndex];
+        if (depStep?.status === 'completed' && depStep.result) {
+          const result = depStep.result as Record<string, unknown>;
+          if (typeof result['hash'] === 'string') {
+            args['hash'] = result['hash'];
+            args['seedHash'] = result['hash'];
+            break;
+          }
+        }
+      }
+    }
+
+    return args;
   }
 
   /**

@@ -175,6 +175,337 @@ const DOMAIN_GENE_TEMPLATES: Readonly<Record<string, Readonly<Record<string, Gen
     size:      { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
     habitat:   { type: 'categorical', options: ['forest', 'plains', 'mountain', 'arctic', 'desert', 'urban'] },
   },
+
+  // ─── Digital/Creative domains ───
+
+  code: {
+    complexity:      { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    maintainability: { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    test_coverage:   { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    language:        { type: 'categorical', options: ['typescript', 'python', 'rust', 'go', 'java', 'csharp'] },
+    paradigm:        { type: 'categorical', options: ['functional', 'oop', 'procedural', 'reactive'] },
+    loc_estimate:    { type: 'scalar', min: 10, max: 100000, defaultValue: 500 },
+    performance:     { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    security_score:  { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+  },
+  shader: {
+    complexity:      { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    performance:     { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    visual_quality:  { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    target:          { type: 'categorical', options: ['vertex', 'fragment', 'compute', 'geometry'] },
+    api:             { type: 'categorical', options: ['glsl', 'hlsl', 'wgsl', 'metal'] },
+    input_count:     { type: 'scalar', min: 1, max: 20, defaultValue: 4 },
+    output_count:    { type: 'scalar', min: 1, max: 8, defaultValue: 1 },
+  },
+  render: {
+    resolution:      { type: 'vector', dimensions: 2, defaultValue: [1920, 1080] },
+    quality:         { type: 'scalar', min: 0, max: 100, defaultValue: 75 },
+    fps_target:      { type: 'scalar', min: 24, max: 144, defaultValue: 60 },
+    pipeline:        { type: 'categorical', options: ['forward', 'deferred', 'raytraced'] },
+    anti_aliasing:   { type: 'categorical', options: ['none', 'msaa', 'taa', 'fxaa'] },
+  },
+  'animation-visual': {
+    frame_count:     { type: 'scalar', min: 1, max: 1000, defaultValue: 24 },
+    fps:             { type: 'scalar', min: 12, max: 60, defaultValue: 24 },
+    loop:            { type: 'categorical', options: ['once', 'loop', 'pingpong'] },
+    easing:          { type: 'categorical', options: ['linear', 'ease_in', 'ease_out', 'spring'] },
+    duration:        { type: 'scalar', min: 0.1, max: 30, defaultValue: 1.0 },
+  },
+  texture: {
+    resolution:      { type: 'scalar', min: 64, max: 8192, defaultValue: 1024 },
+    channels:        { type: 'scalar', min: 1, max: 4, defaultValue: 4 },
+    format:          { type: 'categorical', options: ['png', 'jpg', 'webp', 'basis'] },
+    tiling:          { type: 'categorical', options: ['none', 'repeat', 'mirror'] },
+    filtering:       { type: 'categorical', options: ['nearest', 'linear', 'anisotropic'] },
+  },
+  logo: {
+    complexity:      { type: 'scalar', min: 0, max: 100, defaultValue: 30 },
+    scalability:     { type: 'scalar', min: 0, max: 100, defaultValue: 90 },
+    memorability:    { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    style:           { type: 'categorical', options: ['minimal', 'geometric', 'organic', 'typographic'] },
+    color_count:     { type: 'scalar', min: 1, max: 6, defaultValue: 2 },
+    color:           { type: 'vector', dimensions: 3, defaultValue: [0, 120, 255] },
+  },
+  brand: {
+    recognition:     { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    consistency:     { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    differentiation: { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    tone:            { type: 'categorical', options: ['professional', 'playful', 'bold', 'elegant', 'technical'] },
+    target_audience: { type: 'categorical', options: ['consumer', 'enterprise', 'developer', 'creative'] },
+  },
+  ui: {
+    usability:       { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    accessibility:   { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    responsiveness:  { type: 'scalar', min: 0, max: 100, defaultValue: 80 },
+    framework:       { type: 'categorical', options: ['react', 'vue', 'svelte', 'native', 'flutter'] },
+    style:           { type: 'categorical', options: ['material', 'fluent', 'custom'] },
+    color_scheme:    { type: 'vector', dimensions: 3, defaultValue: [33, 150, 243] },
+  },
+  interaction: {
+    latency:         { type: 'scalar', min: 0, max: 1000, defaultValue: 50 },
+    feedback_quality: { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    gesture_count:   { type: 'scalar', min: 1, max: 20, defaultValue: 5 },
+    modality:        { type: 'categorical', options: ['touch', 'mouse', 'keyboard', 'voice', 'eye'] },
+  },
+  aesthetic: {
+    harmony:         { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    contrast:        { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    rhythm:          { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    style:           { type: 'categorical', options: ['minimalist', 'maximalist', 'brutalist', 'organic', 'geometric'] },
+  },
+  web: {
+    load_time:          { type: 'scalar', min: 0.1, max: 30, defaultValue: 2.0 },
+    lighthouse_score:   { type: 'scalar', min: 0, max: 100, defaultValue: 80 },
+    accessibility_score: { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    framework:          { type: 'categorical', options: ['nextjs', 'remix', 'astro', 'sveltekit'] },
+    bundle_size:        { type: 'scalar', min: 10, max: 10000, defaultValue: 200 },
+  },
+  compression: {
+    ratio:           { type: 'scalar', min: 1, max: 1000, defaultValue: 10 },
+    quality_loss:    { type: 'scalar', min: 0, max: 100, defaultValue: 5 },
+    speed:           { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    algorithm:       { type: 'categorical', options: ['gzip', 'brotli', 'zstd', 'lz4'] },
+  },
+
+  // ─── Narrative/Experiential domains ───
+
+  narrative: {
+    tension:         { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    pacing:          { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    coherence:       { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    genre:           { type: 'categorical', options: ['fantasy', 'scifi', 'horror', 'romance', 'mystery', 'thriller'] },
+    perspective:     { type: 'categorical', options: ['first', 'second', 'third_limited', 'third_omniscient'] },
+    word_count:      { type: 'scalar', min: 100, max: 200000, defaultValue: 5000 },
+    character_depth: { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+  },
+  cinematic: {
+    shot_complexity:    { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    pacing:             { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    visual_storytelling: { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    aspect_ratio:       { type: 'categorical', options: ['16:9', '21:9', '4:3', '1:1'] },
+    color_grade:        { type: 'categorical', options: ['warm', 'cool', 'neutral', 'stylized'] },
+  },
+  emotion: {
+    valence:         { type: 'scalar', min: -1, max: 1, defaultValue: 0 },
+    arousal:         { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    dominance:       { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    category:        { type: 'categorical', options: ['joy', 'sadness', 'anger', 'fear', 'surprise', 'disgust', 'trust', 'anticipation'] },
+  },
+  perception: {
+    visual_acuity:   { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    range:           { type: 'scalar', min: 1, max: 1000, defaultValue: 100 },
+    modality:        { type: 'categorical', options: ['visual', 'auditory', 'tactile', 'olfactory'] },
+    attention:       { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+  },
+  game: {
+    fun_factor:      { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    replayability:   { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    difficulty:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    genre:           { type: 'categorical', options: ['rpg', 'fps', 'rts', 'puzzle', 'platformer', 'roguelike', 'simulation'] },
+    engine:          { type: 'categorical', options: ['godot', 'unity', 'unreal', 'custom', 'browser'] },
+    player_count:    { type: 'scalar', min: 1, max: 1000, defaultValue: 1 },
+  },
+  simulation: {
+    accuracy:        { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    timestep:        { type: 'scalar', min: 0.001, max: 1, defaultValue: 0.016 },
+    entity_count:    { type: 'scalar', min: 1, max: 100000, defaultValue: 100 },
+    deterministic:   { type: 'categorical', options: ['yes', 'no'] },
+    domain:          { type: 'categorical', options: ['physics', 'biology', 'economics', 'social', 'weather'] },
+  },
+
+  // ─── Audio/Music domains ───
+
+  sound: {
+    frequency:       { type: 'scalar', min: 20, max: 20000, defaultValue: 440 },
+    amplitude:       { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    duration:        { type: 'scalar', min: 0.01, max: 300, defaultValue: 1.0 },
+    waveform:        { type: 'categorical', options: ['sine', 'square', 'triangle', 'sawtooth', 'noise'] },
+    spatial:         { type: 'categorical', options: ['mono', 'stereo', 'surround', 'binaural'] },
+  },
+  music: {
+    tempo:           { type: 'scalar', min: 40, max: 220, defaultValue: 120 },
+    key:             { type: 'categorical', options: ['C', 'D', 'E', 'F', 'G', 'A', 'B'] },
+    scale:           { type: 'categorical', options: ['major', 'minor', 'pentatonic', 'blues', 'chromatic'] },
+    time_signature:  { type: 'categorical', options: ['4/4', '3/4', '6/8', '5/4'] },
+    complexity:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    energy:          { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+  },
+  audio: {
+    sample_rate:     { type: 'scalar', min: 8000, max: 192000, defaultValue: 44100 },
+    bit_depth:       { type: 'scalar', min: 8, max: 32, defaultValue: 16 },
+    channels:        { type: 'scalar', min: 1, max: 8, defaultValue: 2 },
+    format:          { type: 'categorical', options: ['wav', 'mp3', 'ogg', 'flac', 'opus'] },
+    dynamic_range:   { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+  },
+
+  // ─── Scientific/Abstract domains ───
+
+  neural: {
+    layers:          { type: 'scalar', min: 1, max: 1000, defaultValue: 6 },
+    neurons_per_layer: { type: 'scalar', min: 1, max: 10000, defaultValue: 256 },
+    activation:      { type: 'categorical', options: ['relu', 'sigmoid', 'tanh', 'gelu', 'swish'] },
+    architecture:    { type: 'categorical', options: ['mlp', 'cnn', 'rnn', 'transformer', 'gan'] },
+    learning_rate:   { type: 'scalar', min: 0.0001, max: 1, defaultValue: 0.001 },
+  },
+  intelligence: {
+    reasoning:       { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    creativity:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    memory:          { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    adaptability:    { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    specialization:  { type: 'categorical', options: ['general', 'analytical', 'creative', 'social', 'strategic'] },
+  },
+  quantum: {
+    qubits:          { type: 'scalar', min: 1, max: 1000, defaultValue: 50 },
+    coherence_time:  { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    gate_fidelity:   { type: 'scalar', min: 0, max: 100, defaultValue: 95 },
+    algorithm:       { type: 'categorical', options: ['grover', 'shor', 'vqe', 'qaoa'] },
+  },
+  molecular: {
+    atoms:           { type: 'scalar', min: 1, max: 10000, defaultValue: 20 },
+    bonds:           { type: 'scalar', min: 0, max: 50000, defaultValue: 25 },
+    energy:          { type: 'scalar', min: -1000, max: 1000, defaultValue: 0 },
+    symmetry:        { type: 'categorical', options: ['c1', 'c2', 'c3', 'd2', 'd3', 'td', 'oh'] },
+    stability:       { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+  },
+  pattern: {
+    regularity:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    complexity:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    symmetry:        { type: 'categorical', options: ['none', 'rotational', 'reflective', 'translational', 'fractal'] },
+    scale:           { type: 'scalar', min: 0.01, max: 1000, defaultValue: 1.0 },
+  },
+  network: {
+    nodes:           { type: 'scalar', min: 1, max: 1000000, defaultValue: 100 },
+    edges:           { type: 'scalar', min: 0, max: 10000000, defaultValue: 500 },
+    density:         { type: 'scalar', min: 0, max: 1, defaultValue: 0.1 },
+    topology:        { type: 'categorical', options: ['mesh', 'star', 'ring', 'tree', 'random', 'scale_free'] },
+    latency:         { type: 'scalar', min: 0, max: 10000, defaultValue: 50 },
+  },
+  language: {
+    vocabulary_size:     { type: 'scalar', min: 100, max: 1000000, defaultValue: 50000 },
+    grammar_complexity:  { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    ambiguity:           { type: 'scalar', min: 0, max: 100, defaultValue: 30 },
+    type:                { type: 'categorical', options: ['natural', 'formal', 'programming', 'constructed'] },
+  },
+  strategy: {
+    risk:            { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    reward:          { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    time_horizon:    { type: 'scalar', min: 1, max: 10000, defaultValue: 100 },
+    complexity:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    type:            { type: 'categorical', options: ['offensive', 'defensive', 'balanced', 'adaptive'] },
+  },
+
+  // ─── Infrastructure/Systems domains ───
+
+  schedule: {
+    duration:        { type: 'scalar', min: 0.1, max: 10000, defaultValue: 60 },
+    priority:        { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    dependencies:    { type: 'scalar', min: 0, max: 100, defaultValue: 10 },
+    type:            { type: 'categorical', options: ['sequential', 'parallel', 'cron', 'event_driven'] },
+  },
+  rule: {
+    strictness:      { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    scope:           { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    enforcement:     { type: 'categorical', options: ['advisory', 'warning', 'blocking', 'fatal'] },
+    domain:          { type: 'categorical', options: ['security', 'style', 'performance', 'accessibility'] },
+  },
+  constraint: {
+    weight:          { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    flexibility:     { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    type:            { type: 'categorical', options: ['equality', 'inequality', 'bound', 'logical'] },
+    scope:           { type: 'categorical', options: ['local', 'global', 'temporal'] },
+  },
+  ecosystem: {
+    biodiversity:    { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    stability:       { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    energy_flow:     { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    trophic_levels:  { type: 'scalar', min: 1, max: 10, defaultValue: 4 },
+    carrying_capacity: { type: 'scalar', min: 1, max: 1000000, defaultValue: 10000 },
+  },
+  infrastructure: {
+    reliability:     { type: 'scalar', min: 0, max: 100, defaultValue: 90 },
+    scalability:     { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    cost:            { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    type:            { type: 'categorical', options: ['compute', 'storage', 'network', 'edge'] },
+    redundancy:      { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+  },
+  product: {
+    market_fit:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    usability:       { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    monetization:    { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    stage:           { type: 'categorical', options: ['idea', 'mvp', 'growth', 'mature', 'decline'] },
+    target:          { type: 'categorical', options: ['b2b', 'b2c', 'b2b2c', 'internal'] },
+  },
+  city: {
+    population:      { type: 'scalar', min: 100, max: 50000000, defaultValue: 100000 },
+    density:         { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    infrastructure:  { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    livability:      { type: 'scalar', min: 0, max: 100, defaultValue: 70 },
+    sustainability:  { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+  },
+
+  // ─── Data/Security domains ───
+
+  'security-threat': {
+    severity:        { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    likelihood:      { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    impact:          { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    vector:          { type: 'categorical', options: ['network', 'physical', 'social', 'supply_chain'] },
+    category:        { type: 'categorical', options: ['malware', 'phishing', 'ddos', 'injection', 'xss'] },
+  },
+  intrusion: {
+    stealth:         { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    persistence:     { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    privilege_level: { type: 'scalar', min: 0, max: 100, defaultValue: 30 },
+    technique:       { type: 'categorical', options: ['exploit', 'social', 'bruteforce', 'supply_chain'] },
+  },
+  forensics: {
+    evidence_quality:       { type: 'scalar', min: 0, max: 100, defaultValue: 60 },
+    timeline_coverage:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    attribution_confidence: { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    type:                   { type: 'categorical', options: ['disk', 'memory', 'network', 'cloud'] },
+  },
+  'memory-store': {
+    capacity:        { type: 'scalar', min: 1, max: 1000000, defaultValue: 1000 },
+    latency:         { type: 'scalar', min: 0, max: 1000, defaultValue: 10 },
+    durability:      { type: 'scalar', min: 0, max: 100, defaultValue: 90 },
+    type:            { type: 'categorical', options: ['volatile', 'persistent', 'distributed', 'hierarchical'] },
+  },
+
+  // ─── Physical/Natural domains ───
+
+  particle: {
+    mass:            { type: 'scalar', min: 0, max: 1000, defaultValue: 1 },
+    charge:          { type: 'scalar', min: -100, max: 100, defaultValue: 0 },
+    spin:            { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    lifetime:        { type: 'scalar', min: 0, max: 1000, defaultValue: 100 },
+    interaction:     { type: 'categorical', options: ['strong', 'weak', 'electromagnetic', 'gravitational'] },
+  },
+  fluid: {
+    viscosity:       { type: 'scalar', min: 0, max: 100, defaultValue: 30 },
+    density:         { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    temperature:     { type: 'scalar', min: -273, max: 10000, defaultValue: 20 },
+    flow_rate:       { type: 'scalar', min: 0, max: 100, defaultValue: 40 },
+    turbulence:      { type: 'scalar', min: 0, max: 100, defaultValue: 20 },
+  },
+  crystal: {
+    hardness:        { type: 'scalar', min: 0, max: 10, defaultValue: 5 },
+    symmetry:        { type: 'categorical', options: ['cubic', 'hexagonal', 'tetragonal', 'orthorhombic', 'monoclinic'] },
+    transparency:    { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    color:           { type: 'vector', dimensions: 3, defaultValue: [200, 200, 255] },
+  },
+  'seed-intelligence': {
+    awareness:       { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    adaptability:    { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    memory:          { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    reasoning:       { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    creativity:      { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+  },
+  void: {
+    entropy:         { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    stability:       { type: 'scalar', min: 0, max: 100, defaultValue: 50 },
+    dimensionality:  { type: 'scalar', min: 1, max: 11, defaultValue: 4 },
+    energy_density:  { type: 'scalar', min: 0, max: 100, defaultValue: 30 },
+  },
 } as const;
 
 // ─────────────────────────────────────────────

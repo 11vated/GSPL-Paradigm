@@ -60,6 +60,15 @@ importers:
       '@paradigm/awareness':
         specifier: workspace:*
         version: link:../awareness
+      '@paradigm/events':
+        specifier: workspace:*
+        version: link:../events
+      '@paradigm/evolution':
+        specifier: workspace:*
+        version: link:../evolution
+      '@paradigm/forge':
+        specifier: workspace:*
+        version: link:../forge
       '@paradigm/knowledge':
         specifier: workspace:*
         version: link:../knowledge
@@ -69,6 +78,9 @@ importers:
       '@paradigm/rng':
         specifier: workspace:*
         version: link:../rng
+      '@paradigm/seed':
+        specifier: workspace:*
+        version: link:../seed
       '@paradigm/types':
         specifier: workspace:*
         version: link:../types

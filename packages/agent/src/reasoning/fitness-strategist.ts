@@ -335,6 +335,160 @@ export class FitnessStrategist {
     return Math.max(0.03, 0.06 - relativeImprovement * 0.1);
   }
 
+  /**
+   * Return a domain-specific fitness function that scores a seed on [0, 1].
+   *
+   * Each domain defines a bespoke formula using the genes most relevant to
+   * that domain. Unknown domains fall back to the average of all scalar gene
+   * values normalized to [0, 1].
+   *
+   * @param domain - The seed domain to get a fitness function for.
+   * @returns A function that takes a UniversalSeed and returns a 0-1 fitness score.
+   */
+  getDomainFitnessFunction(domain: string): (seed: UniversalSeed) => number {
+    const scalarNorm = (seed: UniversalSeed, name: string): number => {
+      const gene = seed.genes[name];
+      if (gene?.type !== 'scalar') return 0;
+      const range = gene.max - gene.min;
+      if (range === 0) return 1;
+      return (gene.value - gene.min) / range;
+    };
+
+    switch (domain) {
+      case 'organism':
+        return (seed) => {
+          const h = scalarNorm(seed, 'health');
+          const a = scalarNorm(seed, 'attack');
+          const d = scalarNorm(seed, 'defense');
+          const s = scalarNorm(seed, 'speed');
+          return (h + a + d + s) / 4;
+        };
+
+      case 'code':
+        return (seed) => {
+          const m = scalarNorm(seed, 'maintainability');
+          const t = scalarNorm(seed, 'test_coverage');
+          const c = scalarNorm(seed, 'complexity');
+          return m * t * (1 - c / 2);
+        };
+
+      case 'narrative':
+        return (seed) => {
+          const c = scalarNorm(seed, 'coherence');
+          const p = scalarNorm(seed, 'pacing');
+          const d = scalarNorm(seed, 'character_depth');
+          return c * p * d;
+        };
+
+      case 'game':
+        return (seed) => {
+          const f = scalarNorm(seed, 'fun_factor');
+          const r = scalarNorm(seed, 'replayability');
+          const d = scalarNorm(seed, 'difficulty');
+          // Difficulty sweet spot at 0.5
+          const difficultyBonus = 1 - Math.abs(d - 0.5) * 2;
+          return f * r * Math.max(0, difficultyBonus);
+        };
+
+      case 'ui':
+        return (seed) => {
+          const u = scalarNorm(seed, 'usability');
+          const a = scalarNorm(seed, 'accessibility');
+          const r = scalarNorm(seed, 'responsiveness');
+          return u * a * r;
+        };
+
+      case 'shader':
+        return (seed) => {
+          const v = scalarNorm(seed, 'visual_quality');
+          const p = scalarNorm(seed, 'performance');
+          return v * p;
+        };
+
+      case 'audio':
+      case 'music':
+        return (seed) => {
+          const comp = scalarNorm(seed, 'complexity');
+          const energy = scalarNorm(seed, 'energy');
+          const dr = scalarNorm(seed, 'dynamic_range');
+          // Balance of complexity and energy, plus dynamic range
+          const harmonyScore = 1 - Math.abs(energy - 0.5) * 2;
+          if (dr > 0) return (comp + Math.max(0, harmonyScore) + dr) / 3;
+          return (comp + Math.max(0, harmonyScore)) / 2;
+        };
+
+      case 'neural':
+        return (seed) => {
+          const layers = scalarNorm(seed, 'layers');
+          const neurons = scalarNorm(seed, 'neurons_per_layer');
+          const lr = scalarNorm(seed, 'learning_rate');
+          // Too high a learning rate is bad — sweet spot around 0.1-0.3 normalized
+          const lrPenalty = lr > 0.5 ? 1 - (lr - 0.5) : 1;
+          return layers * neurons * lrPenalty;
+        };
+
+      case 'simulation':
+        return (seed) => {
+          const acc = scalarNorm(seed, 'accuracy');
+          const ec = scalarNorm(seed, 'entity_count');
+          return acc * (0.5 + ec * 0.5);
+        };
+
+      case 'security-threat':
+        return (seed) => {
+          const sev = scalarNorm(seed, 'severity');
+          const like = scalarNorm(seed, 'likelihood');
+          const imp = scalarNorm(seed, 'impact');
+          return (sev * 0.4 + like * 0.3 + imp * 0.3);
+        };
+
+      case 'ecosystem':
+        return (seed) => {
+          const bio = scalarNorm(seed, 'biodiversity');
+          const stab = scalarNorm(seed, 'stability');
+          const flow = scalarNorm(seed, 'energy_flow');
+          return (bio + stab + flow) / 3;
+        };
+
+      case 'product':
+        return (seed) => {
+          const mf = scalarNorm(seed, 'market_fit');
+          const u = scalarNorm(seed, 'usability');
+          const m = scalarNorm(seed, 'monetization');
+          return mf * 0.4 + u * 0.35 + m * 0.25;
+        };
+
+      case 'web':
+        return (seed) => {
+          const lh = scalarNorm(seed, 'lighthouse_score');
+          const acc = scalarNorm(seed, 'accessibility_score');
+          const lt = scalarNorm(seed, 'load_time');
+          // Lower load time is better, so invert
+          return lh * 0.4 + acc * 0.3 + (1 - lt) * 0.3;
+        };
+
+      default:
+        // Generic: average of all scalar genes normalized to [0, 1]
+        return (seed) => {
+          const genes = Object.values(seed.genes);
+          const scalarGenes = genes.filter(
+            (g): g is Extract<typeof g, { type: 'scalar' }> => g.type === 'scalar',
+          );
+          if (scalarGenes.length === 0) return 0.5;
+          let sum = 0;
+          for (const gene of scalarGenes) {
+            const range = gene.max - gene.min;
+            if (range === 0) {
+              sum += 1;
+            } else {
+              sum += (gene.value - gene.min) / range;
+            }
+          }
+          return sum / scalarGenes.length;
+        };
+    }
+  }
+
   // ─── Private ─────────────────────────────────
 
   /**

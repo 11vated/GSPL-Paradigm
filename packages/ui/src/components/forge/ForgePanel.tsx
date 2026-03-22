@@ -94,7 +94,7 @@ export function ForgePanel({ seed }: ForgePanelProps) {
       const response = await fetch('/api/forge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seedHash: seed.$hash, type: artifactType }),
+        body: JSON.stringify({ hash: seed.$hash, type: artifactType }),
       });
 
       if (!response.ok) {
@@ -104,8 +104,8 @@ export function ForgePanel({ seed }: ForgePanelProps) {
         );
       }
 
-      const data = (await response.json()) as ForgeResult;
-      setResult(data);
+      const data = (await response.json()) as { artifact: ForgeResult };
+      setResult(data.artifact);
     } catch (err: unknown) {
       const message =
         err instanceof Error

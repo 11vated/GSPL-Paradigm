@@ -8,7 +8,12 @@ interface ChatMessage {
 }
 
 interface ChatApiResponse {
-  message: string;
+  reply: string;
+  success: boolean;
+  intent: string;
+  plan: string;
+  toolsUsed: string[];
+  data: unknown;
 }
 
 interface ChatApiError {
@@ -49,7 +54,7 @@ export function ChatPanel() {
     setIsSending(true);
 
     try {
-      const response = await fetch('/api/agent/chat', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: trimmed }),
@@ -67,7 +72,7 @@ export function ChatPanel() {
       const assistantMessage: ChatMessage = {
         id: generateMessageId(),
         role: 'assistant',
-        content: data.message,
+        content: data.reply,
         timestamp: Date.now(),
       };
 

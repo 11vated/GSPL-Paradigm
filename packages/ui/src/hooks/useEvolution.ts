@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
 import * as api from '../services/api';
-import type { UniversalSeed } from '@paradigm/types';
 
 export interface EvolutionState {
   running: boolean;
   generation: number;
   totalGenerations: number;
-  stats: Array<{ generation: number; bestFitness: number; avgFitness: number }>;
-  best: UniversalSeed | null;
+  bestFitness: number;
+  averageFitness: number;
+  finalPopulation: number;
   error: string | null;
 }
 
@@ -16,8 +16,9 @@ export function useEvolution() {
     running: false,
     generation: 0,
     totalGenerations: 0,
-    stats: [],
-    best: null,
+    bestFitness: 0,
+    averageFitness: 0,
+    finalPopulation: 0,
     error: null,
   });
 
@@ -26,7 +27,6 @@ export function useEvolution() {
       ...prev,
       running: true,
       error: null,
-      stats: [],
       totalGenerations: config.generations,
     }));
     try {
@@ -34,9 +34,10 @@ export function useEvolution() {
       setState(prev => ({
         ...prev,
         running: false,
-        generation: config.generations,
-        stats: result.stats,
-        best: result.best,
+        generation: result.generations,
+        bestFitness: result.bestFitness,
+        averageFitness: result.averageFitness,
+        finalPopulation: result.finalPopulation,
       }));
       return result;
     } catch (err) {
@@ -54,8 +55,9 @@ export function useEvolution() {
       running: false,
       generation: 0,
       totalGenerations: 0,
-      stats: [],
-      best: null,
+      bestFitness: 0,
+      averageFitness: 0,
+      finalPopulation: 0,
       error: null,
     });
   }, []);
