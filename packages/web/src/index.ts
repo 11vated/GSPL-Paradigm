@@ -1988,6 +1988,82 @@ export class WebEngine {
         };
       },
     );
+
+    // Tool: co_create — entity modifies its own DNA
+    this.agent.toolRegistry.register(
+      {
+        id: 'co_create',
+        name: 'Co-Create',
+        description: 'Tell an entity to modify itself. E.g., "make it more intimidating" or "add wings".',
+        category: 'seed_management',
+        parameters: [
+          { name: 'hash', type: 'string', description: 'Seed hash of entity to modify', required: true },
+          { name: 'message', type: 'string', description: 'What to change about the entity', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const hash = String(params['hash'] ?? '');
+        const message = String(params['message'] ?? '');
+        const seed = store.get(hash);
+        if (!seed) return { success: false, message: `Seed not found: ${hash}`, durationMs: 0 };
+        const { AgenticCoCreator } = await import('@paradigm/concept');
+        const creator = new AgenticCoCreator();
+        const result = creator.process(seed, message);
+        store.set(result.modifiedSeed.$hash, result.modifiedSeed);
+        eventBus.emit({ type: 'seed.created', seed: result.modifiedSeed, timestamp: Date.now() });
+        return { success: true, message: result.explanation, data: { modifiedHash: result.modifiedSeed.$hash, mutations: result.appliedMutations.length }, durationMs: 0 };
+      },
+    );
+
+    // Tool: create_world — procedural world generation
+    this.agent.toolRegistry.register(
+      {
+        id: 'create_world',
+        name: 'Create World',
+        description: 'Generate a seed-driven procedural world with zones, NPCs, and narrative',
+        category: 'seed_management',
+        parameters: [
+          { name: 'seed', type: 'string', description: 'Seed string for deterministic world generation', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const seedStr = String(params['seed'] ?? `world_${Date.now()}`);
+        const { WorldGenerator } = await import('@paradigm/worlds');
+        const gen = new WorldGenerator();
+        const world = gen.generate(seedStr);
+        return {
+          success: true,
+          message: `Created "${world.narrative.worldName}" — ${world.biome} biome, ${world.zones.length} zones, ${world.npcs.length} NPCs. Mystery: ${world.narrative.mysteryName}`,
+          data: world,
+          durationMs: 0,
+        };
+      },
+    );
+
+    // Tool: recommend_strategy — meta-learning recommendation
+    this.agent.toolRegistry.register(
+      {
+        id: 'recommend_strategy',
+        name: 'Recommend Strategy',
+        description: 'Get meta-learning recommendation for evolution strategy in a domain',
+        category: 'seed_management',
+        parameters: [
+          { name: 'domain', type: 'string', description: 'Domain to get recommendation for', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const domain = String(params['domain'] ?? 'organism');
+        const { MetaLearningCoordinator } = await import('@paradigm/meta');
+        const coord = new MetaLearningCoordinator();
+        const rec = coord.recommend(domain);
+        return {
+          success: true,
+          message: `Recommended for ${domain}: mutation rate ${rec.recommendedMutationRate}, population ${rec.recommendedPopulationSize}, strategy ${rec.recommendedStrategy} (confidence: ${(rec.confidence * 100).toFixed(0)}%)`,
+          data: rec,
+          durationMs: 0,
+        };
+      },
+    );
   }
 
   /**

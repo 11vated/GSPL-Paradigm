@@ -19,6 +19,9 @@
   "dependencies": {
     "@paradigm/agent": "workspace:*",
     "@paradigm/concept": "workspace:*",
+    "@paradigm/fields": "workspace:*",
+    "@paradigm/meta": "workspace:*",
+    "@paradigm/worlds": "workspace:*",
     "@paradigm/events": "workspace:*",
     "@paradigm/evolution": "workspace:*",
     "@paradigm/export": "workspace:*",

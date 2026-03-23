@@ -35,6 +35,7 @@ export interface ConceptActions {
   createEntity(): Promise<void>;
   mutateEntity(): Promise<void>;
   generateSprite(): Promise<void>;
+  coCreate(message: string): Promise<void>;
   clearError(): void;
   reset(): void;
 }
@@ -158,6 +159,23 @@ export const useConceptStore = create<ConceptState & ConceptActions>((set, get) 
         error: err instanceof Error ? err.message : 'Sprite generation failed',
         generationProgress: '',
       });
+    }
+  },
+
+  async coCreate(message) {
+    const { blueprint } = get();
+    if (!blueprint) return;
+    set({ loading: true, error: null });
+    try {
+      const response = await api.chatWithAgent(`co_create: ${blueprint.seed.$hash} ${message}`);
+      if (response.success) {
+        // Refresh entity to pick up modified seed
+        await get().createEntity();
+      } else {
+        set({ loading: false, error: response.reply || 'Co-creation failed' });
+      }
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Co-creation failed', loading: false });
     }
   },
 

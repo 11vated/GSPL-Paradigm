@@ -9,6 +9,40 @@ import { useConceptStore } from '../../stores/conceptStore';
 import { Panel } from '../common/Panel';
 import { SeedPreview } from '../preview/SeedPreview';
 
+function CoCreationInput() {
+  const [coMessage, setCoMessage] = useState('');
+  const coCreate = useConceptStore((s) => s.coCreate);
+  const loading = useConceptStore((s) => s.loading);
+
+  const handleCoCreate = useCallback(() => {
+    if (coMessage.trim().length === 0) return;
+    void coCreate(coMessage);
+    setCoMessage('');
+  }, [coMessage, coCreate]);
+
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        value={coMessage}
+        onChange={(e) => setCoMessage(e.target.value)}
+        placeholder='Tell your entity what to become... "make it more intimidating"'
+        disabled={loading}
+        className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-dim)] focus:border-[var(--color-cyan)] focus:outline-none"
+        onKeyDown={(e) => { if (e.key === 'Enter') handleCoCreate(); }}
+      />
+      <button
+        type="button"
+        onClick={handleCoCreate}
+        disabled={loading || coMessage.trim().length === 0}
+        className="rounded-md bg-[var(--color-cyan)] px-3 py-1.5 text-xs font-medium text-[var(--color-bg)] hover:opacity-90 disabled:opacity-50"
+      >
+        Co-Create
+      </button>
+    </div>
+  );
+}
+
 const STYLES: StyleType[] = ['default', 'anime', 'cartoon', 'pixel', 'fantasy', 'cyberpunk', 'realistic', 'minimal', 'noir'];
 
 function ISCABadges({ isca }: { isca: ISCAResult }) {
@@ -291,6 +325,7 @@ export function ConceptPanel() {
                 Lineage: {evolutionHistory.map((s) => s.$hash.slice(0, 6)).join(' → ')}
               </div>
             )}
+            <CoCreationInput />
           </div>
         </Panel>
       )}

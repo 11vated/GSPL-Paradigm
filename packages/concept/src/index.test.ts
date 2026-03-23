@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ISCAAnalyzer, ConceptInterpreter, ConceptCompiler, ConceptToEntityPipeline, MorphologyGrammar, StyleResolver, ConstraintEngine, CanonicalDatabase } from './index.js';
+import { ISCAAnalyzer, ConceptInterpreter, ConceptCompiler, ConceptToEntityPipeline, MorphologyGrammar, StyleResolver, ConstraintEngine, CanonicalDatabase, AgenticCoCreator } from './index.js';
 import { DeterministicRNG } from '@paradigm/rng';
 
 describe('ISCAAnalyzer', () => {
@@ -331,7 +331,68 @@ describe('ConceptToEntityPipeline', () => {
 
   it('can disable canonical mode', () => {
     const blueprint = pipeline.execute('goku', rng, { useCanonical: false });
-    // Without canonical, "goku" won't match warrior archetype (no keywords match)
     expect(blueprint.concept.archetype).toBe('unknown');
+  });
+});
+
+describe('AgenticCoCreator', () => {
+  const creator = new AgenticCoCreator();
+  const pipeline = new ConceptToEntityPipeline();
+  const rng = new DeterministicRNG('co-create-test');
+
+  function makeEntitySeed() {
+    return pipeline.execute('warrior knight', rng).seed;
+  }
+
+  it('makes entity bigger', () => {
+    const seed = makeEntitySeed();
+    const result = creator.process(seed, 'make it bigger');
+    expect(result.appliedMutations.length).toBeGreaterThan(0);
+    expect(result.matchedIntents).toContain('Scaled up body proportions');
+
+    const widthChange = result.appliedMutations.find((m) => m.subKey === 'torsoWidth');
+    expect(widthChange).toBeDefined();
+    expect(widthChange!.newValue).toBeGreaterThan(widthChange!.oldValue);
+  });
+
+  it('adds wings', () => {
+    const seed = makeEntitySeed();
+    const result = creator.process(seed, 'give it wings');
+    const wingMut = result.appliedMutations.find((m) => m.subKey === 'hasWings');
+    expect(wingMut).toBeDefined();
+    expect(wingMut!.newValue).toBe(1.0);
+  });
+
+  it('makes entity more intimidating', () => {
+    const seed = makeEntitySeed();
+    const result = creator.process(seed, 'make it more intimidating');
+    expect(result.matchedIntents.length).toBeGreaterThan(0);
+    const hornMut = result.appliedMutations.find((m) => m.subKey === 'hasHorns');
+    expect(hornMut).toBeDefined();
+  });
+
+  it('returns helpful message for unknown input', () => {
+    const seed = makeEntitySeed();
+    const result = creator.process(seed, 'xyzzy quantum flux');
+    expect(result.appliedMutations.length).toBe(0);
+    expect(result.explanation).toContain("didn't understand");
+  });
+
+  it('respects gene bounds', () => {
+    const seed = makeEntitySeed();
+    // Apply many times to push toward bounds
+    let currentSeed = seed;
+    for (let i = 0; i < 20; i++) {
+      const result = creator.process(currentSeed, 'make it much bigger and more massive');
+      currentSeed = result.modifiedSeed;
+    }
+    // Check no gene exceeds max
+    const bodyParams = currentSeed.genes['bodyParams'];
+    if (bodyParams?.type === 'struct') {
+      const tw = bodyParams.value['torsoWidth'];
+      if (tw?.type === 'scalar') {
+        expect(tw.value).toBeLessThanOrEqual(tw.max);
+      }
+    }
   });
 });

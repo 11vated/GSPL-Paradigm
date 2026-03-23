@@ -930,9 +930,15 @@ importers:
       '@paradigm/export':
         specifier: workspace:*
         version: link:../export
+      '@paradigm/fields':
+        specifier: workspace:*
+        version: link:../fields
       '@paradigm/forge':
         specifier: workspace:*
         version: link:../forge
+      '@paradigm/meta':
+        specifier: workspace:*
+        version: link:../meta
       '@paradigm/rng':
         specifier: workspace:*
         version: link:../rng
@@ -945,6 +951,9 @@ importers:
       '@paradigm/types':
         specifier: workspace:*
         version: link:../types
+      '@paradigm/worlds':
+        specifier: workspace:*
+        version: link:../worlds
       ws:
         specifier: ^8.20.0
         version: 8.20.0
