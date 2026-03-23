@@ -17,6 +17,7 @@ const VIEW_TABS: ViewTab[] = [
   { id: 'forge', label: 'Forge', icon: '\u{1F528}', shortcut: '4' },
   { id: 'chat', label: 'Chat', icon: '\u{1F4AC}', shortcut: '5' },
   { id: 'entity', label: 'Entity', icon: '\u{1F47E}', shortcut: '6' },
+  { id: 'world', label: 'World', icon: '\u{1F30D}', shortcut: '7' },
 ];
 
 export function Sidebar() {

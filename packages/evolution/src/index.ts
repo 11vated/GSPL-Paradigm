@@ -946,3 +946,10 @@ export class EvolutionError extends Error {
     this.name = 'EvolutionError';
   }
 }
+
+// Creative Asset Evolution
+export { SpriteGenome, AnimationGenome } from './creative-genomes.js';
+export type { PixelGrid, SpriteGenes, AnimationGenes } from './creative-genomes.js';
+export { evaluateColorHarmony, evaluateBalance, evaluateReadability, compositeAestheticFitness } from './creative-fitness.js';
+export { CreativeEvolutionEngine } from './creative-evolution.js';
+export type { CreativeEvolutionConfig, CreativeEvolutionResult } from './creative-evolution.js';

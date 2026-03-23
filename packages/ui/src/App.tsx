@@ -8,6 +8,7 @@ import { ForgePanel } from './components/forge/ForgePanel';
 import { ChatPanel } from './components/agent/ChatPanel';
 import { GardenView } from './components/garden/GardenView';
 import { ConceptPanel } from './components/concept/ConceptPanel';
+import { WorldPanel } from './components/world/WorldPanel';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { StatusBar } from './components/common/StatusBar';
 import { ToastContainer } from './components/common/Toast';
@@ -82,7 +83,7 @@ export function App() {
       if (!e.ctrlKey && !e.altKey && !e.metaKey) {
         const target = e.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
-        const viewMap: Record<string, typeof activeView> = { '1': 'garden', '2': 'seed', '3': 'evolution', '4': 'forge', '5': 'chat', '6': 'entity' };
+        const viewMap: Record<string, typeof activeView> = { '1': 'garden', '2': 'seed', '3': 'evolution', '4': 'forge', '5': 'chat', '6': 'entity', '7': 'world' };
         const view = viewMap[e.key];
         if (view) {
           e.preventDefault();
@@ -123,6 +124,7 @@ export function App() {
           {activeView === 'forge' && <ForgePanel seed={selectedSeed} />}
           {activeView === 'chat' && <ChatPanel />}
           {activeView === 'entity' && <ConceptPanel />}
+          {activeView === 'world' && <WorldPanel />}
         </ErrorBoundary>
       </AppShell>
       <StatusBar />

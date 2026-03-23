@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 
-export type ViewId = 'garden' | 'seed' | 'evolution' | 'forge' | 'chat' | 'entity';
+export type ViewId = 'garden' | 'seed' | 'evolution' | 'forge' | 'chat' | 'entity' | 'world';
 
 export interface UiState {
   /** Currently active view. */
