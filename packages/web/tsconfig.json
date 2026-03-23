@@ -3,5 +3,5 @@
   "compilerOptions": { "outDir": "dist", "rootDir": "src", "composite": true },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../types" }, { "path": "../rng" }, { "path": "../events" }, { "path": "../seed" }, { "path": "../agent" }, { "path": "../forge" }]
+  "references": [{ "path": "../types" }, { "path": "../rng" }, { "path": "../events" }, { "path": "../seed" }, { "path": "../agent" }, { "path": "../forge" }, { "path": "../concept" }]
 }

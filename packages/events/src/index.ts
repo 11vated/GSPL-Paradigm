@@ -51,8 +51,26 @@ export class EventBus {
   private readonly maxReplaySize: number;
   private _totalEmitted: number = 0;
 
-  constructor(options?: { maxReplaySize?: number }) {
+  // Backpressure: pending events queue
+  private readonly maxQueueDepth: number;
+  private pendingQueue: ParadigmEvent[] = [];
+  private _droppedCount: number = 0;
+
+  // Dead-letter queue: events whose handlers threw
+  private deadLetterQueue: Array<{ event: ParadigmEvent; error: unknown; handler: string; timestamp: number }> = [];
+  private readonly maxDeadLetterSize: number;
+
+  // Handler timing metrics
+  private handlerTimings: Map<string, { totalMs: number; callCount: number; maxMs: number }> = new Map();
+
+  constructor(options?: {
+    maxReplaySize?: number;
+    maxQueueDepth?: number;
+    maxDeadLetterSize?: number;
+  }) {
     this.maxReplaySize = options?.maxReplaySize ?? 0;
+    this.maxQueueDepth = options?.maxQueueDepth ?? 10_000;
+    this.maxDeadLetterSize = options?.maxDeadLetterSize ?? 100;
   }
 
   /**
@@ -133,8 +151,8 @@ export class EventBus {
 
   /**
    * Emit event synchronously to all registered handlers.
-   * Handlers are called in registration order. Errors are caught and logged
-   * so that one failing handler doesn't prevent others from running.
+   * Handlers are called in registration order. Errors are caught, logged,
+   * and routed to the dead-letter queue.
    */
   emit<T extends ParadigmEvent>(event: T): void {
     this._totalEmitted++;
@@ -143,21 +161,51 @@ export class EventBus {
     const handlerSet = this.handlers.get(event.type);
     if (handlerSet) {
       for (const handler of handlerSet) {
+        const start = performance.now();
         try {
           handler(event);
         } catch (err) {
           console.error(`[EventBus] Handler error for ${event.type}:`, err);
+          this.recordDeadLetter(event, err, event.type);
         }
+        this.recordTiming(event.type, performance.now() - start);
       }
     }
 
     for (const handler of this.wildcardHandlers) {
+      const start = performance.now();
       try {
         handler(event);
       } catch (err) {
         console.error(`[EventBus] Wildcard handler error for ${event.type}:`, err);
+        this.recordDeadLetter(event, err, '*');
       }
+      this.recordTiming('*', performance.now() - start);
     }
+  }
+
+  /**
+   * Emit multiple events in a batch. Applies backpressure: if the queue
+   * exceeds maxQueueDepth, oldest events are dropped.
+   *
+   * @param events - Array of events to emit.
+   * @returns Number of events actually emitted (may be less than input if backpressure applied).
+   */
+  emitBatch(events: ParadigmEvent[]): number {
+    const available = Math.max(0, this.maxQueueDepth - this.pendingQueue.length);
+    const toProcess = events.slice(0, available);
+    const dropped = events.length - toProcess.length;
+
+    if (dropped > 0) {
+      this._droppedCount += dropped;
+      console.warn(`[EventBus] Backpressure: dropped ${dropped} events (queue full at ${this.maxQueueDepth})`);
+    }
+
+    for (const event of toProcess) {
+      this.emit(event);
+    }
+
+    return toProcess.length;
   }
 
   /**
@@ -278,12 +326,86 @@ export class EventBus {
     }
   }
 
-  /** Full reset: clear all handlers and replay buffer. */
+  /** Full reset: clear all handlers, replay buffer, dead letters, and metrics. */
   reset(): void {
     this.handlers.clear();
     this.wildcardHandlers.clear();
     this.replayBuffer = [];
+    this.pendingQueue = [];
+    this.deadLetterQueue = [];
+    this.handlerTimings.clear();
     this._totalEmitted = 0;
+    this._droppedCount = 0;
+  }
+
+  // ─────────────────────────────────────────
+  // Dead-Letter Queue
+  // ─────────────────────────────────────────
+
+  /** Record an event that caused a handler to throw. */
+  private recordDeadLetter(event: ParadigmEvent, error: unknown, handler: string): void {
+    this.deadLetterQueue.push({
+      event,
+      error,
+      handler,
+      timestamp: Date.now(),
+    });
+    if (this.deadLetterQueue.length > this.maxDeadLetterSize) {
+      this.deadLetterQueue.shift();
+    }
+  }
+
+  /** Get all dead-letter entries (events whose handlers threw). */
+  getDeadLetters(): ReadonlyArray<{ event: ParadigmEvent; error: unknown; handler: string; timestamp: number }> {
+    return [...this.deadLetterQueue];
+  }
+
+  /** Clear the dead-letter queue. */
+  clearDeadLetters(): void {
+    this.deadLetterQueue = [];
+  }
+
+  /** Number of events dropped due to backpressure. */
+  get droppedCount(): number {
+    return this._droppedCount;
+  }
+
+  // ─────────────────────────────────────────
+  // Handler Timing Metrics
+  // ─────────────────────────────────────────
+
+  /** Record handler execution time for a given event type. */
+  private recordTiming(eventType: string, ms: number): void {
+    let timing = this.handlerTimings.get(eventType);
+    if (!timing) {
+      timing = { totalMs: 0, callCount: 0, maxMs: 0 };
+      this.handlerTimings.set(eventType, timing);
+    }
+    timing.totalMs += ms;
+    timing.callCount += 1;
+    if (ms > timing.maxMs) timing.maxMs = ms;
+  }
+
+  /**
+   * Get handler execution metrics per event type.
+   *
+   * @returns Map of event type to { avgMs, maxMs, callCount }.
+   */
+  getMetrics(): Map<string, { avgMs: number; maxMs: number; callCount: number }> {
+    const result = new Map<string, { avgMs: number; maxMs: number; callCount: number }>();
+    for (const [type, timing] of this.handlerTimings) {
+      result.set(type, {
+        avgMs: timing.callCount > 0 ? timing.totalMs / timing.callCount : 0,
+        maxMs: timing.maxMs,
+        callCount: timing.callCount,
+      });
+    }
+    return result;
+  }
+
+  /** Clear all timing metrics. */
+  clearMetrics(): void {
+    this.handlerTimings.clear();
   }
 }
 

@@ -1,21 +1,77 @@
 @import 'tailwindcss';
 
 :root {
-  --color-primary: #22c55e;
-  --color-primary-dim: #16a34a;
-  --color-surface: #18181b;
-  --color-surface-raised: #27272a;
-  --color-border: #3f3f46;
-  --color-text: #fafafa;
-  --color-text-muted: #a1a1aa;
-  --color-accent: #a78bfa;
+  /* Deep space dark theme */
+  --color-bg: #0a0e1a;
+  --color-surface: #111827;
+  --color-surface-raised: #1e293b;
+  --color-surface-overlay: #1e293b;
+  --color-border: #1e293b;
+  --color-border-bright: #334155;
+
+  /* Bioluminescent accents */
+  --color-primary: #10b981;
+  --color-primary-dim: #059669;
+  --color-primary-glow: rgba(16, 185, 129, 0.15);
+  --color-cyan: #00f0ff;
+  --color-cyan-glow: rgba(0, 240, 255, 0.12);
+  --color-violet: #8b5cf6;
+  --color-violet-glow: rgba(139, 92, 246, 0.12);
+  --color-accent: #8b5cf6;
+
+  /* Semantic */
   --color-danger: #ef4444;
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
   --color-warning: #f59e0b;
+  --color-warning-bg: rgba(245, 158, 11, 0.1);
+  --color-info: #3b82f6;
+  --color-info-bg: rgba(59, 130, 246, 0.1);
+  --color-success: #10b981;
+  --color-success-bg: rgba(16, 185, 129, 0.1);
+
+  /* Text */
+  --color-text: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-text-dim: #475569;
+
+  /* Typography */
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Spacing scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+  --shadow-glow-primary: 0 0 20px var(--color-primary-glow);
+  --shadow-glow-cyan: 0 0 20px var(--color-cyan-glow);
+
+  /* Animation */
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
   overflow: hidden;
   height: 100vh;
 }

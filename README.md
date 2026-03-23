@@ -1,8 +1,6 @@
 # GSPL Paradigm
 
-**The Living World Compiler** — A platform where everything is a seed that evolves.
-
-GSPL Paradigm treats every entity (characters, worlds, shaders, narratives, music) as an evolvable **UniversalSeed** genome. Create seeds from natural language, breed and mutate populations, evolve toward fitness goals, forge artifacts, and export to 14+ game engines.
+**The Living World Compiler** — A seed-native creative platform where everything is a `UniversalSeed` genome that evolves.
 
 ## Quick Start
 
@@ -10,136 +8,97 @@ GSPL Paradigm treats every entity (characters, worlds, shaders, narratives, musi
 # Install dependencies
 pnpm install
 
-# Start the API server
-pnpm dev:api    # http://localhost:5001
+# Build all 44 packages
+pnpm build
 
-# Start the web UI (in another terminal)
-pnpm dev:ui     # http://localhost:5173
-
-# Or run the TUI
-pnpm dev:tui
+# Start development
+pnpm dev:api    # API server on http://localhost:5001
+pnpm dev:ui     # React UI on http://localhost:5173
+pnpm dev:tui    # Terminal UI
+pnpm dev:cli    # CLI tool
+pnpm dev:desktop # Tauri desktop app
 ```
 
 ## Architecture
 
-```
-44 packages across 5 layers:
+5-layer monorepo with 44 packages, ~115K LOC TypeScript (strict mode).
 
-Foundation:  types, rng, events, seed, lang, runtime
-Evolution:   evolution, compute, generate
-Intelligence: agent, llm, awareness, knowledge, search
-Synthesis:   forge, export, sprites, media, 3d, canvas, engines
-Surfaces:    web, ui, cli, tui, studio, desktop
 ```
-
-**Zero external runtime dependencies** in core packages. Pure TypeScript.
+Layer 1: Foundation    types, rng (OKLab color science), events (backpressure + metrics), seed, lang, runtime
+Layer 2: Evolution     evolution, compute, generate
+Layer 3: Intelligence  agent (11 tools), llm (4 providers + resilience), awareness, knowledge
+Layer 4: Synthesis     forge (OKLab palettes), export (12 formats), store (IndexedDB/SQLite), sprites,
+                       media, 3d, canvas, engines, narrative, physics, behavior
+Layer 5: Surfaces      web (REST + WebSocket + rate limiting), ui (React 19 + D3 + Three.js),
+                       cli, tui, studio, desktop (Tauri v2)
+```
 
 ## Core Concepts
 
-### Seeds
-Everything is a `UniversalSeed` — an immutable genetic data structure with 9 gene types:
-- **Scalar** — numeric values with bounds (health: 100, speed: 45)
-- **Categorical** — enumerated choices (role: "warrior", element: "fire")
-- **Vector** — multi-dimensional arrays (position: [0, 0, 0], color: [0.9, 0.2, 0.1])
-- **Expression** — compiled formulas (damage: "attack * (1 - defense/100)")
-- **Struct, Array, Graph, Tensor, TimeSeries** — complex nested data
+**UniversalSeed** — Immutable genetic data structure with 9 gene types:
+Scalar, Categorical, Vector, Expression, Struct, Array, Graph, Tensor, TimeSeries
 
-### Evolution
-Seeds breed, mutate, and compete across generations:
-```typescript
-import { createSeed, mutateSeed, breedSeeds } from '@paradigm/seed';
-import { EvolutionEngine } from '@paradigm/evolution';
+**Evolution Engine** — Seeds breed, mutate, and compete across generations with tournament selection, configurable crossover/mutation strategies, and fitness tracking.
 
-const warrior = createSeed('Warrior', 'organism', genes, rng);
-const mutant = mutateSeed(warrior, 0.3, rng);
-const offspring = breedSeeds(warrior, mutant, 'uniform', 0.5, rng);
+**Forge** — Converts seeds into 20 artifact types: HTML pages, games, shaders, 3D models, music, sprites, documentation, and more. All colors use perceptually uniform OKLab color science.
 
-const engine = new EvolutionEngine({ generations: 50, populationSize: 100 });
-const result = engine.run(warrior, fitnessFunction);
-// result.best — the champion seed after 50 generations
-```
+**GSPL Language** — Domain-specific language for seed declaration with 42 keywords, 162+ built-in functions, and a full lexer/parser/AST pipeline.
 
-### Forge
-Convert evolved seeds into concrete artifacts:
-```typescript
-import { Forge } from '@paradigm/forge';
+**Agent** — 10-stage intelligence pipeline (PERCEIVE through EVOLVE) with 11 registered tools, provider-agnostic LLM integration (Ollama, Claude, OpenAI, Gemini), and NLP compiler that works without any LLM.
 
-const forge = new Forge();
-const game = forge.forge(champion, { type: 'html_game' });
-const sheet = forge.forge(champion, { type: 'character_sheet' });
-const code = forge.forge(champion, { type: 'source_code' });
-```
+## The Studio
 
-19 artifact types: html_page, html_game, website, api_spec, documentation, logo, color_palette, icon, source_code, shader, database_schema, test_suite, character_sheet, world_map, sprite_sheet, particle_config, soundtrack, sound_effect, physics_sim.
+Professional-grade web UI with deep space dark theme (`#0a0e1a`):
 
-### GSPL Language
-A dedicated programming language for seed declaration:
-```gspl
-@gseed 1.0
-@domain organism
-
-seed "Fire Dragon" organism {
-  health: scalar(250, 0, 500);
-  attack: scalar(85, 0, 100);
-  element: categorical("fire", ["fire", "ice", "lightning"]);
-  color: vector([0.9, 0.2, 0.1]);
-}
-```
-
-## Platforms
-
-| Platform | Status | Run |
-|----------|--------|-----|
-| **Web App** | React 19 + Tailwind 4 + Three.js | `pnpm dev:ui` |
-| **API Server** | Node.js + WebEngine | `pnpm dev:api` |
-| **Desktop** | Tauri v2 (Rust) | `pnpm dev:desktop` |
-| **TUI** | Interactive terminal | `pnpm dev:tui` |
-| **CLI** | Command-line | `pnpm dev:cli` |
-| **Mobile** | PWA (installable) | Deploy web app |
-
-## LLM Integration
-
-Provider-agnostic AI with all major providers:
-```typescript
-import { createProvider, detectAvailableProviders } from '@paradigm/llm';
-
-const providers = detectAvailableProviders(); // ['claude', 'ollama', ...]
-const claude = createProvider('claude');
-const response = await claude.chat([{ role: 'user', content: 'Design a boss enemy seed' }]);
-```
-
-Supported: **Claude** (Anthropic), **GPT-4o** (OpenAI), **Gemini** (Google), **Ollama** (local).
-
-## Agent Intelligence
-
-The GSPL agent reasons about seeds natively — not just text generation:
-- **Seed Reasoner** — Analyzes structure, suggests improvements
-- **Fitness Strategist** — Recommends evolution strategies
-- **Cross-Domain Synthesizer** — Identifies breeding opportunities
-- **Gap Detector** — Finds missing capabilities
-- **Emergence Predictor** — Predicts behaviors from gene combinations
-
-Three autonomy modes: Supervised, Co-pilot, Autonomous.
-
-## Development
-
-```bash
-pnpm install          # Install all dependencies
-pnpm build            # Build all 44 packages
-pnpm test             # Run all test suites
-pnpm typecheck        # TypeScript strict check
-```
+- **Garden View** — 3D Three.js scene with domain-specific seed meshes, golden-angle spiral layout, instanced particles, relation connection lines
+- **Seed Inspector** — 9 gene-type visualizers (scalar bars, categorical pills, vector charts, tensor heatmaps, timeseries curves), tabbed metadata/lineage/fitness panels
+- **Evolution Dashboard** — D3.js fitness charts (best/avg/worst with confidence band), diversity area chart, real-time SSE streaming, 4 stat cards
+- **Forge Panel** — 20 artifact types, tabbed Forge/Gallery preview, download with proper MIME types
+- **Agent Chat** — Markdown rendering, tool execution badges, autonomy mode selector (supervised/copilot/autonomous), suggestion chips
 
 ## Tech Stack
 
-- **Language:** TypeScript 5.7 (strict mode)
-- **Monorepo:** pnpm 10.32 + Turbo
-- **Testing:** Vitest (80% coverage target)
-- **Frontend:** React 19, Tailwind CSS 4, Three.js, Framer Motion
-- **Desktop:** Tauri v2 (Rust)
-- **LLM:** Claude, OpenAI, Gemini, Ollama
-- **Persistence:** SQLite (Node), IndexedDB (browser)
+| Layer | Technology |
+|-------|-----------|
+| Language | TypeScript 5.7 (strict mode) |
+| Monorepo | pnpm 10.32 + Turbo 2.4 |
+| Frontend | React 19 + Tailwind CSS 4 + Three.js + D3.js + Framer Motion |
+| State | Zustand (5 stores: seed, evolution, forge, agent, ui) |
+| Desktop | Tauri v2 (Rust backend) |
+| Storage | SQLite (Node) / IndexedDB (browser) via CachedAsyncAdapter |
+| Realtime | SSE + WebSocket (bidirectional, with backpressure) |
+| LLM | Ollama (free, local) + Claude/OpenAI/Gemini with ResilientProvider (retry + circuit breaker) |
+| Validation | Zod v4 schemas on all API boundaries |
+| Testing | Vitest with coverage |
+| Color | OKLab (Bjorn Ottosson 2020, exact M1/M2 matrices from Sprite Forge) |
+
+## Export Formats (12)
+
+HTML, Markdown, JSON, Python, Rust, C#, GDScript, GLSL, CSV, SVG, GSPL (native), glTF 2.0
+
+## API
+
+REST server on port 5001 with WebSocket support:
+
+- `GET/POST /api/seeds` — Seed CRUD
+- `POST /api/evolve` — Run evolution campaigns
+- `POST /api/forge` — Generate artifacts
+- `POST /api/chat` — Agent conversation
+- `GET /api/search?q=` — Full-text seed search
+- `GET /api/lineage/:hash` — Ancestry tree
+- `GET /api/diagnostics` — Request metrics, rate limiter stats
+- `WS /ws` — Bidirectional WebSocket with event subscriptions
+
+## Commands
+
+```bash
+pnpm build        # Build all packages
+pnpm test         # Run all tests
+pnpm typecheck    # TypeScript strict check
+pnpm lint         # ESLint all packages
+pnpm clean        # Remove dist/ directories
+```
 
 ## License
 
-All rights reserved.
+MIT

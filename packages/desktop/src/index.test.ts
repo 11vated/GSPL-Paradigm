@@ -12,7 +12,7 @@ describe('MAIN_WINDOW_CONFIG', () => {
   it('dimensions', () => { expect(MAIN_WINDOW_CONFIG.width).toBe(1400); expect(MAIN_WINDOW_CONFIG.height).toBe(900); expect(MAIN_WINDOW_CONFIG.minWidth).toBe(1024); });
   it('dark bg', () => expect(MAIN_WINDOW_CONFIG.backgroundColor).toBe('#0a0e1a'));
   it('frame', () => { expect(MAIN_WINDOW_CONFIG.frame).toBe(true); expect(MAIN_WINDOW_CONFIG.transparent).toBe(false); });
-  it('title', () => expect(MAIN_WINDOW_CONFIG.title).toBe('GSPL Paradigm'));
+  it('title', () => expect(MAIN_WINDOW_CONFIG.title).toContain('GSPL Paradigm'));
 });
 
 describe('SPLASH_WINDOW_CONFIG', () => {

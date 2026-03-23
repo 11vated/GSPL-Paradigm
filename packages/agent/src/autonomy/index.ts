@@ -44,4 +44,5 @@ export type {
   AgentPlan,
   StepResult,
   ProgressReport,
+  ToolExecutor,
 } from './autonomous.js';

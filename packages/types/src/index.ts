@@ -544,3 +544,232 @@ export interface LLMProvider {
   readonly name: string;
   chat(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse>;
 }
+
+// ─────────────────────────────────────────────
+// ISCA Types (Sprite Concept Analysis)
+// ─────────────────────────────────────────────
+
+export type CharacterArchetype =
+  | 'warrior' | 'mage' | 'archer' | 'rogue' | 'knight'
+  | 'berserker' | 'paladin' | 'healer' | 'bard' | 'summoner'
+  | 'beast' | 'undead' | 'elemental' | 'dragon' | 'demon'
+  | 'golem' | 'merchant' | 'villager' | 'royalty' | 'guard'
+  | 'unknown';
+
+export type BodyStructure =
+  | 'humanoid' | 'quadruped' | 'winged' | 'serpentine'
+  | 'amorphous' | 'mechanical' | 'multi_limbed' | 'floating';
+
+export type AnimationCapability =
+  | 'can_walk' | 'can_run' | 'can_jump' | 'can_fly' | 'can_swim'
+  | 'can_attack_melee' | 'can_attack_ranged' | 'can_cast'
+  | 'can_crouch' | 'can_climb' | 'can_sprint' | 'can_dash' | 'can_block';
+
+export type SecondaryActionElement =
+  | 'hair' | 'cape' | 'tail' | 'cloth' | 'chains' | 'wings';
+
+export interface ISCAResult {
+  readonly archetype: CharacterArchetype;
+  readonly bodyStructure: BodyStructure;
+  readonly capabilities: readonly AnimationCapability[];
+  readonly weapons: readonly string[];
+  readonly armor: readonly string[];
+  readonly elements: readonly string[];
+  readonly colors: readonly string[];
+  readonly keywords: readonly string[];
+  readonly suggestedAnimations: readonly string[];
+  readonly secondaryActionElements: readonly SecondaryActionElement[];
+  readonly secondaryActionDelayFrames: number;
+  readonly requiresSeparateLayers: boolean;
+  readonly equipmentLayers: readonly string[];
+  readonly smearFramesNeeded: number;
+}
+
+// ─────────────────────────────────────────────
+// Morphology Types
+// ─────────────────────────────────────────────
+
+export type SymmetryType = 'bilateral' | 'radial' | 'asymmetric';
+
+export interface ProportionRules {
+  readonly headToBodyRatio: number;
+  readonly limbToBodyRatio: number;
+  readonly shoulderToHipRatio: number;
+  readonly eyeToHeadRatio: number;
+}
+
+export interface MorphologyGene {
+  readonly bodyStructure: BodyStructure;
+  readonly proportions: ProportionRules;
+  readonly symmetry: SymmetryType;
+  readonly exaggeration: number;
+  readonly skeletonOverrides: Record<string, { scaleX: number; scaleY: number }>;
+}
+
+// ─────────────────────────────────────────────
+// Constraint Types
+// ─────────────────────────────────────────────
+
+export type ConstraintCategory =
+  | 'proportion' | 'symmetry' | 'silhouette' | 'readability' | 'style';
+
+export interface ConstraintRule {
+  readonly id: string;
+  readonly category: ConstraintCategory;
+  readonly description: string;
+  readonly priority: number;
+  readonly check: string;
+}
+
+// ─────────────────────────────────────────────
+// Ability Definition
+// ─────────────────────────────────────────────
+
+export interface AbilityDefinition {
+  readonly name: string;
+  readonly element: string;
+  readonly type: 'melee' | 'ranged' | 'magic' | 'passive' | 'transformation';
+  readonly visualEffect: string;
+  readonly intensity: number;
+}
+
+// ─────────────────────────────────────────────
+// Concept Model (Full character description)
+// ─────────────────────────────────────────────
+
+export interface ConceptModel {
+  readonly name: string;
+  readonly conceptType: ConceptType;
+  readonly archetype: CharacterArchetype;
+  readonly bodyStructure: BodyStructure;
+  readonly species: string;
+  readonly personality: PersonalityVector;
+  readonly style: StyleType;
+  readonly abilities: readonly AbilityDefinition[];
+  readonly elements: readonly string[];
+  readonly weapons: readonly string[];
+  readonly armor: readonly string[];
+  readonly colors: readonly string[];
+  readonly suggestedAnimations: readonly string[];
+  readonly secondaryActions: readonly SecondaryActionElement[];
+  readonly equipmentLayers: readonly string[];
+  readonly morphology: MorphologyGene;
+  readonly constraints: readonly ConstraintRule[];
+  readonly isca: ISCAResult;
+}
+
+// ─────────────────────────────────────────────
+// Entity Blueprint (Seed + visual + behavior)
+// ─────────────────────────────────────────────
+
+export interface EntityBlueprint {
+  readonly concept: ConceptModel;
+  readonly seed: UniversalSeed;
+  readonly skeletonType: BodyStructure;
+  readonly spriteConfig: {
+    readonly frameWidth: number;
+    readonly frameHeight: number;
+    readonly animations: readonly string[];
+    readonly fps: number;
+  };
+}
+
+// ─────────────────────────────────────────────
+// Result Type — Typed error handling
+// ─────────────────────────────────────────────
+
+/** Success variant of Result. */
+export interface Ok<T> {
+  readonly ok: true;
+  readonly value: T;
+}
+
+/** Failure variant of Result. */
+export interface Err<E = ParadigmError> {
+  readonly ok: false;
+  readonly error: E;
+}
+
+/**
+ * Discriminated union for typed error handling.
+ * Use instead of try/catch at module boundaries.
+ *
+ * @example
+ * ```ts
+ * function divide(a: number, b: number): Result<number> {
+ *   if (b === 0) return { ok: false, error: new ParadigmError('Division by zero', 'MATH_ERROR') };
+ *   return { ok: true, value: a / b };
+ * }
+ * ```
+ */
+export type Result<T, E = ParadigmError> = Ok<T> | Err<E>;
+
+/** Create a success Result. */
+export function ok<T>(value: T): Ok<T> {
+  return { ok: true, value };
+}
+
+/** Create a failure Result. */
+export function err<E = ParadigmError>(error: E): Err<E> {
+  return { ok: false, error };
+}
+
+// ─────────────────────────────────────────────
+// ParadigmError — Structured error base class
+// ─────────────────────────────────────────────
+
+/**
+ * Base error class for all GSPL Paradigm errors.
+ * Provides structured context for debugging, logging, and user-facing messages.
+ */
+export class ParadigmError extends Error {
+  /** Machine-readable error code (e.g., 'STORE_ERROR', 'EVOLUTION_DIVERGED'). */
+  readonly code: string;
+  /** Additional structured context for debugging. */
+  readonly context: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    code: string = 'PARADIGM_ERROR',
+    context: Record<string, unknown> = {},
+  ) {
+    super(message);
+    this.name = 'ParadigmError';
+    this.code = code;
+    this.context = context;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Paginated Response — API list endpoints
+// ─────────────────────────────────────────────
+
+/** Paginated response wrapper for list API endpoints. */
+export interface PaginatedResponse<T> {
+  readonly items: T[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly hasMore: boolean;
+}
+
+// ─────────────────────────────────────────────
+// WebSocket Message — Bidirectional comms
+// ─────────────────────────────────────────────
+
+/** WebSocket message types for client-server communication. */
+export type WebSocketMessageType =
+  | 'seed.create' | 'seed.mutate' | 'seed.breed' | 'seed.delete'
+  | 'evolution.start' | 'evolution.pause' | 'evolution.step'
+  | 'forge.request' | 'forge.cancel'
+  | 'agent.message' | 'agent.approve_tool'
+  | 'subscribe' | 'unsubscribe'
+  | 'event' | 'error' | 'ack';
+
+/** Bidirectional WebSocket message envelope. */
+export interface WebSocketMessage<T = unknown> {
+  readonly id: string;
+  readonly type: WebSocketMessageType;
+  readonly payload: T;
+  readonly timestamp: number;
+}

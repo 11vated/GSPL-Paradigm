@@ -179,18 +179,16 @@ export function createEvolutionTools(ctx: ToolContext): AgentTool[] {
 
         evolutionRuns.set(runId, run);
 
-        const lastStat = result.stats[result.stats.length - 1];
+        const lastStats = result.stats[result.stats.length - 1];
         ctx.eventBus.emit({
           type: 'evolution.tick',
           generation: generations,
           populationSize: result.population.length,
-          bestFitness: lastStat?.bestFitness ?? 0,
-          avgFitness: lastStat?.avgFitness ?? 0,
-          diversity: lastStat?.diversity ?? 0,
+          bestFitness: lastStats?.bestFitness ?? 0,
+          avgFitness: lastStats?.avgFitness ?? 0,
+          diversity: lastStats?.diversity ?? 0,
           timestamp: Date.now(),
         });
-
-        const lastStats = result.stats[result.stats.length - 1];
 
         return {
           success: true,

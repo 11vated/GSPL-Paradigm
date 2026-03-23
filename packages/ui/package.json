@@ -12,17 +12,21 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@paradigm/renderer": "workspace:*",
     "@paradigm/studio": "workspace:*",
     "@paradigm/types": "workspace:*",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
+    "d3": "^7.9.0",
     "framer-motion": "^12.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "three": "^0.175.0"
+    "three": "^0.175.0",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
+    "@types/d3": "^7.4.3",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@types/three": "^0.175.0",

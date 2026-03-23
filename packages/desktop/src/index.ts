@@ -29,13 +29,13 @@ export interface WindowConfig {
   readonly vibrancy?: string;
 }
 
-/** Main application window: 1400x900, dark theme. */
+/** Main application window: 1400x900, deep space dark theme. */
 export const MAIN_WINDOW_CONFIG: WindowConfig = {
   width: 1400,
   height: 900,
   minWidth: 1024,
   minHeight: 600,
-  title: 'GSPL Paradigm',
+  title: 'GSPL Paradigm — The Living World Compiler',
   backgroundColor: '#0a0e1a',
   show: true,
   frame: true,

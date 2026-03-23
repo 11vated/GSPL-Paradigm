@@ -789,6 +789,125 @@ export class SkeletonGenerator {
 
     return { name: `skeleton_${seed.$name}`, bones: scaledBones };
   }
+
+  /** Generate a winged skeleton (humanoid base + wing bones). */
+  generateWinged(): Skeleton {
+    const humanoid = this.generateHumanoid();
+    const chestIndex = humanoid.bones.findIndex((b) => b.name === 'chest');
+    const ci = chestIndex >= 0 ? chestIndex : 2;
+
+    const wingBones: Bone[] = [
+      { name: 'wing_root.L',  position: new Vec3(-0.12, 0.15, 0.08), rotation: Vec3.zero(), parentIndex: ci },
+      { name: 'wing_mid.L',   position: new Vec3(-0.30, 0.10, 0.15), rotation: Vec3.zero(), parentIndex: humanoid.bones.length },
+      { name: 'wing_tip.L',   position: new Vec3(-0.35, 0.05, 0.20), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 1 },
+      { name: 'wing_root.R',  position: new Vec3( 0.12, 0.15, 0.08), rotation: Vec3.zero(), parentIndex: ci },
+      { name: 'wing_mid.R',   position: new Vec3( 0.30, 0.10, 0.15), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 3 },
+      { name: 'wing_tip.R',   position: new Vec3( 0.35, 0.05, 0.20), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 4 },
+      // Tail
+      { name: 'tail_base',    position: new Vec3(0, -0.05, 0.10), rotation: Vec3.zero(), parentIndex: 0 },
+      { name: 'tail_mid',     position: new Vec3(0, -0.02, 0.20), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 6 },
+      { name: 'tail_tip',     position: new Vec3(0,  0.00, 0.25), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 7 },
+    ];
+
+    return { name: 'winged', bones: [...humanoid.bones, ...wingBones] };
+  }
+
+  /** Generate a serpentine skeleton (spine chain with no limbs). */
+  generateSerpentine(): Skeleton {
+    const segmentCount = 10;
+    const bones: Bone[] = [
+      { name: 'root', position: new Vec3(0, 0, 0), rotation: Vec3.zero(), parentIndex: -1 },
+    ];
+    for (let i = 0; i < segmentCount; i++) {
+      bones.push({
+        name: `spine_${i}`,
+        position: new Vec3(0, 0, -0.15),
+        rotation: Vec3.zero(),
+        parentIndex: i,
+      });
+    }
+    // Head at the end
+    bones.push({
+      name: 'head',
+      position: new Vec3(0, 0.05, -0.12),
+      rotation: Vec3.zero(),
+      parentIndex: segmentCount,
+    });
+    return { name: 'serpentine', bones };
+  }
+
+  /** Generate skeleton from BodyStructure type. */
+  generateFromBodyStructure(body: string): Skeleton {
+    switch (body) {
+      case 'humanoid': return this.generateHumanoid();
+      case 'quadruped': return this.generateQuadruped();
+      case 'winged': return this.generateWinged();
+      case 'serpentine': return this.generateSerpentine();
+      case 'mechanical': return this.generateHumanoid(); // mechanical uses humanoid base
+      case 'multi_limbed': return this.generateHumanoid(); // start with humanoid, extend later
+      case 'floating': return this.generateHumanoid(); // ghostly humanoid
+      case 'amorphous': {
+        // Minimal skeleton: root + 4 control points
+        return {
+          name: 'amorphous',
+          bones: [
+            { name: 'root', position: new Vec3(0, 0, 0), rotation: Vec3.zero(), parentIndex: -1 },
+            { name: 'top',  position: new Vec3(0, 0.3, 0), rotation: Vec3.zero(), parentIndex: 0 },
+            { name: 'left', position: new Vec3(-0.2, 0, 0), rotation: Vec3.zero(), parentIndex: 0 },
+            { name: 'right',position: new Vec3(0.2, 0, 0), rotation: Vec3.zero(), parentIndex: 0 },
+            { name: 'front',position: new Vec3(0, 0, -0.2), rotation: Vec3.zero(), parentIndex: 0 },
+          ],
+        };
+      }
+      default: return this.generateHumanoid();
+    }
+  }
+}
+
+/**
+ * Apply morphology proportions to a skeleton by scaling bone positions.
+ * Head bones scale by headToBodyRatio, limb bones by limbToBodyRatio,
+ * shoulder bones by shoulderToHipRatio. Exaggeration amplifies deviations.
+ */
+export function applyMorphologyToSkeleton(
+  skeleton: Skeleton,
+  proportions: { headToBodyRatio: number; limbToBodyRatio: number; shoulderToHipRatio: number },
+  exaggeration: number,
+): Skeleton {
+  const headScale = 0.5 + proportions.headToBodyRatio * 2.0; // maps 0.13-0.55 → 0.76-1.6
+  const limbScale = 0.5 + proportions.limbToBodyRatio;         // maps 0.3-0.75 → 0.8-1.25
+  const shoulderScale = proportions.shoulderToHipRatio;
+
+  const headBones = new Set(['head', 'neck']);
+  const limbBones = new Set([
+    'upper_arm.L', 'forearm.L', 'hand.L', 'upper_arm.R', 'forearm.R', 'hand.R',
+    'thigh.L', 'shin.L', 'foot.L', 'thigh.R', 'shin.R', 'foot.R',
+    'upper_leg.L', 'lower_leg.L', 'upper_leg.R', 'lower_leg.R',
+  ]);
+  const shoulderBones = new Set(['shoulder.L', 'shoulder.R']);
+
+  const scaledBones: Bone[] = skeleton.bones.map((bone) => {
+    let sx = 1.0;
+    let sy = 1.0;
+
+    if (headBones.has(bone.name)) {
+      const factor = 1.0 + (headScale - 1.0) * exaggeration;
+      sx = factor;
+      sy = factor;
+    } else if (limbBones.has(bone.name)) {
+      const factor = 1.0 + (limbScale - 1.0) * exaggeration;
+      sy = factor;
+    } else if (shoulderBones.has(bone.name)) {
+      sx = 1.0 + (shoulderScale - 1.0) * exaggeration;
+    }
+
+    return {
+      ...bone,
+      position: new Vec3(bone.position.x * sx, bone.position.y * sy, bone.position.z),
+    };
+  });
+
+  return { name: skeleton.name, bones: scaledBones };
 }
 
 // ─────────────────────────────────────────────

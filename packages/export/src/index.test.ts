@@ -1250,9 +1250,9 @@ describe('ExportEngine', () => {
     engine = new ExportEngine();
   });
 
-  it('should return all 10 supported formats', () => {
+  it('should return all 12 supported formats', () => {
     const formats = engine.getSupportedFormats();
-    expect(formats).toHaveLength(10);
+    expect(formats).toHaveLength(12);
     expect(formats).toContain('html');
     expect(formats).toContain('markdown');
     expect(formats).toContain('json');

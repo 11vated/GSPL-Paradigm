@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import type { UniversalSeed, SeedDomain } from '@paradigm/types';
+import type { SeedDomain } from '@paradigm/types';
+import { useSeedStore } from '../../stores/seedStore';
 
 const DOMAINS: SeedDomain[] = [
   'organism', 'vehicle', 'weapon', 'building', 'terrain',
@@ -9,54 +10,30 @@ const DOMAINS: SeedDomain[] = [
   'code', 'strategy', 'game', 'narrative', 'ecosystem',
 ];
 
-interface SeedCreatorProps {
-  onSeedCreated: (seed: UniversalSeed) => void;
-}
+export function SeedCreator() {
+  const createSeed = useSeedStore((s) => s.createSeed);
+  const storeLoading = useSeedStore((s) => s.loading);
+  const storeError = useSeedStore((s) => s.error);
 
-interface CreateSeedError {
-  message: string;
-}
-
-export function SeedCreator({ onSeedCreated }: SeedCreatorProps) {
   const [name, setName] = useState('');
   const [domain, setDomain] = useState<SeedDomain>('organism');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const isLoading = storeLoading;
+  const error = localError ?? storeError;
 
   const handleCreate = useCallback(async () => {
     if (name.trim().length === 0) {
-      setError('Seed name is required.');
+      setLocalError('Seed name is required.');
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/seed/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), domain, genes: {} }),
-      });
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as CreateSeedError | null;
-        throw new Error(
-          body?.message ?? `Server returned ${response.status}: ${response.statusText}`,
-        );
-      }
-
-      const data = (await response.json()) as { seed: UniversalSeed };
-      onSeedCreated(data.seed);
+    setLocalError(null);
+    const result = await createSeed({ name: name.trim(), domain });
+    if (result) {
       setName('');
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to create seed. Is the API server running?';
-      setError(message);
-    } finally {
-      setIsLoading(false);
     }
-  }, [name, domain, onSeedCreated]);
+  }, [name, domain, createSeed]);
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">

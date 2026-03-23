@@ -32,7 +32,9 @@ export type ExportFormat =
   | 'gdscript'
   | 'glsl'
   | 'csv'
-  | 'svg';
+  | 'svg'
+  | 'gspl'
+  | 'gltf';
 
 /** Result of an export operation. */
 export interface ExportResult {
@@ -1112,6 +1114,113 @@ ${geneLines.join('\n')}
 // ─────────────────────────────────────────────
 
 /** Central export engine that routes seeds to format-specific exporters. */
+// ─── GSPL Exporter ──────────────────────────────────────────────
+
+/** Exports seeds in native GSPL language format (.gspl files). */
+export class GSPLExporter {
+  export(seed: UniversalSeed): ExportResult {
+    const lines: string[] = [];
+    lines.push(`// GSPL Paradigm v4.0 — Seed Export`);
+    lines.push(`// Generated: ${new Date().toISOString()}`);
+    lines.push('');
+    lines.push(`seed "${seed.$name}" ${seed.$domain} {`);
+
+    for (const [name, gene] of Object.entries(seed.genes)) {
+      lines.push(`  ${name}: ${this.geneToGspl(gene)};`);
+    }
+
+    lines.push('}');
+    lines.push('');
+    lines.push(`// hash: ${seed.$hash}`);
+    lines.push(`// generation: ${seed.$lineage.generation}`);
+
+    if (seed.$fitness?.primary !== undefined) {
+      lines.push(`// fitness: ${seed.$fitness.primary.toFixed(6)}`);
+    }
+
+    const content = lines.join('\n');
+    return { format: 'gspl', content, filename: `${seed.$name.replace(/\s+/g, '_').toLowerCase()}.gspl`, mimeType: 'text/plain' };
+  }
+
+  private geneToGspl(gene: Gene): string {
+    switch (gene.type) {
+      case 'scalar': return `scalar(${gene.value}, ${gene.min}, ${gene.max})`;
+      case 'categorical': return `categorical("${gene.value}", [${gene.options.map(o => `"${o}"`).join(', ')}])`;
+      case 'vector': return `vector([${gene.value.join(', ')}])`;
+      case 'expression': return `expression("${gene.source}")`;
+      case 'struct': return `struct({ ${Object.entries(gene.value).map(([k, v]) => `${k}: ${this.geneToGspl(v)}`).join(', ')} })`;
+      case 'array': return `array([${gene.value.map(v => this.geneToGspl(v)).join(', ')}])`;
+      case 'graph': return `graph(${gene.nodes.size} nodes, ${gene.edges.length} edges)`;
+      case 'tensor': return `tensor(shape=[${gene.shape.join(', ')}], ${gene.data.length} values)`;
+      case 'timeseries': return `timeseries(${gene.interpolation}, [${gene.keyframes.map(k => `${k.t}:${k.v}`).join(', ')}])`;
+    }
+  }
+}
+
+// ─── glTF Exporter ─────────────────────────────────────────────
+
+/** Exports seed as a minimal glTF 2.0 JSON file with embedded geometry. */
+export class GLTFExporter {
+  export(seed: UniversalSeed): ExportResult {
+    const scalars = Object.values(seed.genes)
+      .filter((g): g is Extract<Gene, { type: 'scalar' }> => g.type === 'scalar');
+
+    const size = scalars.length > 0 ? 0.5 + (scalars[0]!.value / scalars[0]!.max) * 1.5 : 1.0;
+
+    // Minimal glTF 2.0 with a single box mesh
+    const gltf = {
+      asset: { version: '2.0', generator: 'GSPL Paradigm Export', copyright: `Seed: ${seed.$name}` },
+      scene: 0,
+      scenes: [{ name: seed.$name, nodes: [0] }],
+      nodes: [{ name: seed.$name, mesh: 0, scale: [size, size, size] }],
+      meshes: [{ name: `${seed.$name}_mesh`, primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+      accessors: [
+        { bufferView: 0, componentType: 5126, count: 8, type: 'VEC3', max: [0.5, 0.5, 0.5], min: [-0.5, -0.5, -0.5] },
+        { bufferView: 1, componentType: 5123, count: 36, type: 'SCALAR' },
+      ],
+      bufferViews: [
+        { buffer: 0, byteOffset: 0, byteLength: 96, target: 34962 },
+        { buffer: 0, byteOffset: 96, byteLength: 72, target: 34963 },
+      ],
+      buffers: [{ byteLength: 168, uri: this.generateBoxBuffer() }],
+      extras: {
+        gsplVersion: '4.0',
+        seedHash: seed.$hash,
+        domain: seed.$domain,
+        generation: seed.$lineage.generation,
+        fitness: seed.$fitness?.primary,
+        geneCount: Object.keys(seed.genes).length,
+      },
+    };
+
+    const content = JSON.stringify(gltf, null, 2);
+    return { format: 'gltf', content, filename: `${seed.$name.replace(/\s+/g, '_').toLowerCase()}.gltf`, mimeType: 'model/gltf+json' };
+  }
+
+  /** Generate base64 data URI for a unit box (8 vertices + 36 indices). */
+  private generateBoxBuffer(): string {
+    const positions = new Float32Array([
+      -0.5, -0.5, 0.5,  0.5, -0.5, 0.5,  0.5, 0.5, 0.5,  -0.5, 0.5, 0.5,
+      -0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, -0.5,
+    ]);
+    const indices = new Uint16Array([
+      0, 1, 2, 0, 2, 3, 1, 5, 6, 1, 6, 2, 5, 4, 7, 5, 7, 6,
+      4, 0, 3, 4, 3, 7, 3, 2, 6, 3, 6, 7, 4, 5, 1, 4, 1, 0,
+    ]);
+
+    const buffer = new Uint8Array(positions.byteLength + indices.byteLength);
+    buffer.set(new Uint8Array(positions.buffer), 0);
+    buffer.set(new Uint8Array(indices.buffer), positions.byteLength);
+
+    // Convert to base64 data URI
+    let binary = '';
+    for (let i = 0; i < buffer.length; i++) {
+      binary += String.fromCharCode(buffer[i]!);
+    }
+    return `data:application/octet-stream;base64,${btoa(binary)}`;
+  }
+}
+
 export class ExportEngine {
   private readonly htmlExporter: HTMLExporter;
   private readonly markdownExporter: MarkdownExporter;
@@ -1123,6 +1232,8 @@ export class ExportEngine {
   private readonly glslExporter: GLSLExporter;
   private readonly csvExporter: CSVExporter;
   private readonly svgExporter: SVGExporter;
+  private readonly gsplExporter: GSPLExporter;
+  private readonly gltfExporter: GLTFExporter;
 
   constructor() {
     this.htmlExporter = new HTMLExporter();
@@ -1135,6 +1246,8 @@ export class ExportEngine {
     this.glslExporter = new GLSLExporter();
     this.csvExporter = new CSVExporter();
     this.svgExporter = new SVGExporter();
+    this.gsplExporter = new GSPLExporter();
+    this.gltfExporter = new GLTFExporter();
   }
 
   /** Export a single seed in the specified format. */
@@ -1160,6 +1273,10 @@ export class ExportEngine {
         return this.csvExporter.export(seed);
       case 'svg':
         return this.svgExporter.export(seed);
+      case 'gspl':
+        return this.gsplExporter.export(seed);
+      case 'gltf':
+        return this.gltfExporter.export(seed);
     }
   }
 
@@ -1188,7 +1305,7 @@ export class ExportEngine {
 
   /** Return all supported export formats. */
   getSupportedFormats(): ExportFormat[] {
-    return ['html', 'markdown', 'json', 'python', 'rust', 'csharp', 'gdscript', 'glsl', 'csv', 'svg'];
+    return ['html', 'markdown', 'json', 'python', 'rust', 'csharp', 'gdscript', 'glsl', 'csv', 'svg', 'gspl', 'gltf'];
   }
 
   /** Return the exporter instance for a given format. */
@@ -1204,7 +1321,9 @@ export class ExportEngine {
     | GDScriptExporter
     | GLSLExporter
     | CSVExporter
-    | SVGExporter {
+    | SVGExporter
+    | GSPLExporter
+    | GLTFExporter {
     switch (format) {
       case 'html':
         return this.htmlExporter;
@@ -1226,6 +1345,10 @@ export class ExportEngine {
         return this.csvExporter;
       case 'svg':
         return this.svgExporter;
+      case 'gspl':
+        return this.gsplExporter;
+      case 'gltf':
+        return this.gltfExporter;
     }
   }
 }

@@ -187,7 +187,7 @@ export function breedSeeds<T extends GeneMap = GeneMap>(
   const child: UniversalSeed<T> = {
     $gst: '4.0',
     $domain: parentA.$domain,
-    $name: `${parentA.$name}+${parentB.$name}`,
+    $name: `${(parentA.$name.split('+')[0] ?? parentA.$name).split('\u00d7')[0] ?? parentA.$name}\u00d7${(parentB.$name.split('+')[0] ?? parentB.$name).split('\u00d7')[0] ?? parentB.$name}`,
     $hash: '',
     genes: childGenes,
     $lineage: {

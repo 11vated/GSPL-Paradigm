@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@paradigm/agent": "workspace:*",
+    "@paradigm/concept": "workspace:*",
     "@paradigm/events": "workspace:*",
     "@paradigm/evolution": "workspace:*",
     "@paradigm/export": "workspace:*",
@@ -25,10 +26,13 @@
     "@paradigm/rng": "workspace:*",
     "@paradigm/seed": "workspace:*",
     "@paradigm/store": "workspace:*",
-    "@paradigm/types": "workspace:*"
+    "@paradigm/types": "workspace:*",
+    "ws": "^8.20.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
