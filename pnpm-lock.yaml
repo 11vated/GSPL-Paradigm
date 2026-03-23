@@ -326,6 +326,22 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
 
+  packages/fields:
+    dependencies:
+      '@paradigm/rng':
+        specifier: workspace:*
+        version: link:../rng
+      '@paradigm/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
+
   packages/forge:
     dependencies:
       '@paradigm/rng':
@@ -435,6 +451,22 @@ importers:
         version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
 
   packages/media:
+    dependencies:
+      '@paradigm/rng':
+        specifier: workspace:*
+        version: link:../rng
+      '@paradigm/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
+
+  packages/meta:
     dependencies:
       '@paradigm/rng':
         specifier: workspace:*
@@ -621,6 +653,22 @@ importers:
       '@paradigm/seed':
         specifier: workspace:*
         version: link:../seed
+      '@paradigm/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
+
+  packages/scheduler:
+    dependencies:
+      '@paradigm/events':
+        specifier: workspace:*
+        version: link:../events
       '@paradigm/types':
         specifier: workspace:*
         version: link:../types
@@ -910,6 +958,22 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
+
+  packages/worlds:
+    dependencies:
+      '@paradigm/rng':
+        specifier: workspace:*
+        version: link:../rng
+      '@paradigm/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

@@ -893,3 +893,7 @@ export class ConceptToEntityPipeline {
 // Re-export Sprite Forge integration
 export { SpriteForgeIntegration } from './sprite-forge.js';
 export type { SpriteForgeResult, GenerationOptions } from './sprite-forge.js';
+
+// Re-export Agentic Co-Creation
+export { AgenticCoCreator } from './co-creation.js';
+export type { CoCreationResult } from './co-creation.js';
