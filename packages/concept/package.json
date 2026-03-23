@@ -17,6 +17,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@paradigm/ontology": "workspace:*",
     "@paradigm/types": "workspace:*",
     "@paradigm/rng": "workspace:*",
     "@paradigm/seed": "workspace:*"

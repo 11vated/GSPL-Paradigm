@@ -60,6 +60,9 @@ importers:
       '@paradigm/awareness':
         specifier: workspace:*
         version: link:../awareness
+      '@paradigm/concept':
+        specifier: workspace:*
+        version: link:../concept
       '@paradigm/events':
         specifier: workspace:*
         version: link:../events
@@ -75,6 +78,9 @@ importers:
       '@paradigm/llm':
         specifier: workspace:*
         version: link:../llm
+      '@paradigm/ontology':
+        specifier: workspace:*
+        version: link:../ontology
       '@paradigm/rng':
         specifier: workspace:*
         version: link:../rng
@@ -208,6 +214,9 @@ importers:
 
   packages/concept:
     dependencies:
+      '@paradigm/ontology':
+        specifier: workspace:*
+        version: link:../ontology
       '@paradigm/rng':
         specifier: workspace:*
         version: link:../rng
@@ -517,6 +526,19 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
 
+  packages/ontology:
+    dependencies:
+      '@paradigm/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
+
   packages/os:
     dependencies:
       '@paradigm/events':
@@ -786,6 +808,9 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -918,9 +943,15 @@ importers:
       '@paradigm/agent':
         specifier: workspace:*
         version: link:../agent
+      '@paradigm/behavior':
+        specifier: workspace:*
+        version: link:../behavior
       '@paradigm/concept':
         specifier: workspace:*
         version: link:../concept
+      '@paradigm/engines':
+        specifier: workspace:*
+        version: link:../engines
       '@paradigm/events':
         specifier: workspace:*
         version: link:../events
@@ -936,15 +967,30 @@ importers:
       '@paradigm/forge':
         specifier: workspace:*
         version: link:../forge
+      '@paradigm/generate':
+        specifier: workspace:*
+        version: link:../generate
+      '@paradigm/lang':
+        specifier: workspace:*
+        version: link:../lang
       '@paradigm/meta':
         specifier: workspace:*
         version: link:../meta
+      '@paradigm/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@paradigm/rng':
         specifier: workspace:*
         version: link:../rng
+      '@paradigm/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@paradigm/seed':
         specifier: workspace:*
         version: link:../seed
+      '@paradigm/sprites':
+        specifier: workspace:*
+        version: link:../sprites
       '@paradigm/store':
         specifier: workspace:*
         version: link:../store

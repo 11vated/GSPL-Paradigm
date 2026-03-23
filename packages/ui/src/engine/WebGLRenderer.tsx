@@ -15,6 +15,12 @@ interface WebGLRendererProps {
   vertexSource: string;
   /** Additional CSS classes. */
   className?: string;
+  /** Emotion state: 0=calm, 1=rage. Controls aura color/intensity. */
+  emotion?: number;
+  /** Transform state: 0=base, 1=fully transformed. Controls morph+color shift. */
+  transform?: number;
+  /** Power activation: 0=dormant, 1=active. Controls ability VFX. */
+  power?: number;
 }
 
 /**
@@ -25,8 +31,14 @@ export const WebGLRenderer = memo(function WebGLRenderer({
   fragmentSource,
   vertexSource,
   className = '',
+  emotion = 0,
+  transform = 0,
+  power = 0,
 }: WebGLRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mouseRef = useRef<{ x: number; y: number }>({ x: 0.5, y: 0.5 });
+  const uniformsRef = useRef({ emotion, transform, power });
+  uniformsRef.current = { emotion, transform, power };
   const stateRef = useRef<{
     gl: WebGL2RenderingContext | null;
     program: WebGLProgram | null;
@@ -143,8 +155,17 @@ export const WebGLRenderer = memo(function WebGLRenderer({
       // Set uniforms
       const resLoc = gl.getUniformLocation(program, 'u_resolution');
       const timeLoc = gl.getUniformLocation(program, 'u_time');
+      const mouseLoc = gl.getUniformLocation(program, 'u_mouse');
+      const emotionLoc = gl.getUniformLocation(program, 'u_emotion');
+      const transformLoc = gl.getUniformLocation(program, 'u_transform');
+      const powerLoc = gl.getUniformLocation(program, 'u_power');
+
       if (resLoc) gl.uniform2f(resLoc, pixelW, pixelH);
       if (timeLoc) gl.uniform1f(timeLoc, (performance.now() - stateRef.current.startTime) / 1000.0);
+      if (mouseLoc) gl.uniform2f(mouseLoc, mouseRef.current.x, mouseRef.current.y);
+      if (emotionLoc) gl.uniform1f(emotionLoc, uniformsRef.current.emotion);
+      if (transformLoc) gl.uniform1f(transformLoc, uniformsRef.current.transform);
+      if (powerLoc) gl.uniform1f(powerLoc, uniformsRef.current.power);
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       stateRef.current.animId = requestAnimationFrame(render);
@@ -167,12 +188,21 @@ export const WebGLRenderer = memo(function WebGLRenderer({
     };
   }, []);
 
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    mouseRef.current = {
+      x: (e.clientX - rect.left) / rect.width,
+      y: 1.0 - (e.clientY - rect.top) / rect.height,
+    };
+  }, []);
+
   return (
     <div className={`relative overflow-hidden rounded-lg ${className}`}>
       <canvas
         ref={canvasRef}
         className="h-full w-full"
         style={{ display: 'block' }}
+        onMouseMove={handleMouseMove}
       />
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-bg)]/90 p-4">

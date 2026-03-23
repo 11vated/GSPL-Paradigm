@@ -73,3 +73,115 @@ export function getToolCategories(tools: AgentTool[]): Record<string, string[]> 
   }
   return categories;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// v2: INTENT → TOOL DISPATCH with Complexity Detection
+// ═══════════════════════════════════════════════════════════════════
+
+import type { IntentType, ParsedIntent } from '@paradigm/types';
+
+/**
+ * Mapping from NLP intent types to default tool names.
+ * For 'create' intent, complexity detection may override to a different tool.
+ */
+const INTENT_TO_TOOL: Record<IntentType, string> = {
+  create: 'seed_create',       // overridden to create_entity for complex inputs
+  breed: 'seed_breed',
+  mutate: 'seed_mutate',
+  evolve: 'evolution_start',
+  inspect: 'seed_inspect',
+  query: 'knowledge_search',
+  explain: 'knowledge_explain',
+  compare: 'seed_compare',
+  optimize: 'evolution_recommend',
+  simulate: 'world_simulate',
+  export: 'forge_artifact',
+  import: 'seed_create',
+  help: 'knowledge_explain',
+  status: 'world_status',
+  undo: 'seed_list',
+  redo: 'seed_list',
+  meta: 'world_status',
+  forge: 'forge_artifact',
+  search: 'knowledge_search',
+  configure: 'evolution_recommend',
+};
+
+/** Style/concept keywords that indicate a complex creation requiring full pipeline. */
+const COMPLEXITY_INDICATORS = new Set([
+  // Anime substyles
+  'shonen', 'seinen', 'chibi', 'ghibli', 'ufotable', 'trigger', 'kyoani',
+  // Western styles
+  'cartoon', 'looney', 'disney', 'pixar', 'pixel',
+  // Realism
+  'realistic', 'photorealistic', 'pbr', 'cinematic',
+  // Other styles
+  'cyberpunk', 'noir', 'fantasy', 'minimal',
+  // Power systems
+  'ki', 'chakra', 'nen', 'mana', 'cursed', 'quirk', 'stand', 'bending', 'force',
+  'kamehameha', 'rasengan', 'bankai', 'domain', 'expansion',
+  // Ability indicators
+  'beam', 'aura', 'transformation', 'super', 'saiyan', 'powers',
+  // Personality/dimension indicators
+  'personality', 'gentle', 'aggressive', 'stoic', 'trickster',
+  // Complex species
+  'dragon', 'phoenix', 'lich', 'celestial', 'eldritch', 'chimera',
+]);
+
+/**
+ * Estimate the complexity of a creation request.
+ * Higher score = more concept tokens detected = should use full pipeline.
+ *
+ * @param input - Raw user input text.
+ * @returns Complexity score (0-1). >= 0.3 triggers full create_entity pipeline.
+ */
+export function estimateComplexity(input: string): number {
+  const words = input.toLowerCase().split(/\s+/);
+  let indicators = 0;
+  for (const word of words) {
+    if (COMPLEXITY_INDICATORS.has(word)) indicators++;
+  }
+  // Also count total concept-like words (> 2 chars, not common verbs/articles)
+  const SKIP = new Set(['the', 'a', 'an', 'with', 'and', 'create', 'make', 'build', 'generate', 'design', 'entity', 'seed', 'new']);
+  const conceptWords = words.filter(w => w.length > 2 && !SKIP.has(w)).length;
+
+  // Score: explicit indicators weigh more, but word count matters too
+  return Math.min(1.0, (indicators * 0.2) + (conceptWords > 3 ? 0.2 : 0));
+}
+
+/**
+ * Dispatch an NLP intent to the best matching agent tool.
+ *
+ * For 'create' intents, uses complexity detection:
+ * - Simple (< 3 concept words): seed_create (fast path)
+ * - Complex (3+ concept words or style/power indicators): create_entity (full pipeline with 12 dimensions)
+ *
+ * @param intent - Parsed intent from NLPCompiler.
+ * @param tools - Available agent tools.
+ * @param rawInput - Original user input for complexity analysis.
+ * @returns The best matching tool, or undefined if no match.
+ */
+export function dispatchIntent(
+  intent: ParsedIntent,
+  tools: AgentTool[],
+  rawInput?: string,
+): AgentTool | undefined {
+  let toolName = INTENT_TO_TOOL[intent.type] ?? 'seed_create';
+
+  // For create intents, check if input is complex enough for full pipeline
+  if (intent.type === 'create' && rawInput) {
+    const complexity = estimateComplexity(rawInput);
+    if (complexity >= 0.3) {
+      // Try to use create_entity (full pipeline) if available
+      const entityTool = findToolByName(tools, 'create_entity');
+      if (entityTool) return entityTool;
+    }
+  }
+
+  return findToolByName(tools, toolName);
+}
+
+/** Get the dispatch table (for debugging/testing). */
+export function getDispatchTable(): Record<string, string> {
+  return { ...INTENT_TO_TOOL };
+}

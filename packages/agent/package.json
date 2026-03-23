@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@paradigm/awareness": "workspace:*",
+    "@paradigm/concept": "workspace:*",
+    "@paradigm/ontology": "workspace:*",
     "@paradigm/events": "workspace:*",
     "@paradigm/evolution": "workspace:*",
     "@paradigm/forge": "workspace:*",

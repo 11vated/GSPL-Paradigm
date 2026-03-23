@@ -3,5 +3,5 @@
   "compilerOptions": { "outDir": "dist", "rootDir": "src", "composite": true },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../types" }, { "path": "../rng" }, { "path": "../seed" }, { "path": "../ontology" }]
+  "references": [{ "path": "../types" }]
 }

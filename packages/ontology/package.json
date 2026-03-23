@@ -1,5 +1,5 @@
 {
-  "name": "@paradigm/store",
+  "name": "@paradigm/ontology",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
@@ -17,14 +17,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@paradigm/events": "workspace:*",
-    "@paradigm/rng": "workspace:*",
-    "@paradigm/types": "workspace:*",
-    "better-sqlite3": "^12.8.0"
+    "@paradigm/types": "workspace:*"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.5.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

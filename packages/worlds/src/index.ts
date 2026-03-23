@@ -243,3 +243,174 @@ export class WorldGenerator {
     };
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// v2: Ecosystem Dynamics — Population, predator/prey, spawn rules
+// ═══════════════════════════════════════════════════════════════════
+
+/** A species slot in the ecosystem with population tracking. */
+export interface EcosystemSlot {
+  readonly speciesId: string;
+  readonly role: 'apex' | 'predator' | 'prey' | 'producer' | 'decomposer';
+  population: number;
+  readonly capacity: number;
+  readonly growthRate: number;
+  readonly preferredBiome: BiomeType;
+  readonly preyOn: readonly string[];
+  readonly predators: readonly string[];
+}
+
+/** Spawn rule for placing entities in the world. */
+export interface SpawnRule {
+  readonly speciesId: string;
+  readonly biome: BiomeType;
+  readonly minDifficulty: number;
+  readonly maxDifficulty: number;
+  readonly density: number;
+  readonly groupSize: { readonly min: number; readonly max: number };
+}
+
+/** Result of one ecosystem simulation tick. */
+export interface EcosystemTickResult {
+  readonly births: readonly { speciesId: string; count: number }[];
+  readonly deaths: readonly { speciesId: string; count: number; cause: string }[];
+  readonly totalPopulation: number;
+  readonly diversity: number;
+}
+
+export class EcosystemSimulator {
+  private readonly slots: Map<string, EcosystemSlot> = new Map();
+
+  addSlot(slot: EcosystemSlot): void {
+    this.slots.set(slot.speciesId, slot);
+  }
+
+  /** Simulate one ecosystem tick using Lotka-Volterra dynamics. */
+  tick(rng: DeterministicRNG): EcosystemTickResult {
+    const births: { speciesId: string; count: number }[] = [];
+    const deaths: { speciesId: string; count: number; cause: string }[] = [];
+
+    for (const slot of this.slots.values()) {
+      // Logistic growth: dN/dt = r * N * (1 - N/K)
+      const growthFactor = slot.growthRate * slot.population * (1 - slot.population / slot.capacity);
+      const naturalBirths = Math.max(0, Math.round(growthFactor + (rng.next() - 0.5) * 2));
+
+      // Predation: each predator consumes proportional to prey density
+      let predationDeaths = 0;
+      for (const predatorId of slot.predators) {
+        const predator = this.slots.get(predatorId);
+        if (predator && predator.population > 0) {
+          const killRate = 0.01 * predator.population * (slot.population / slot.capacity);
+          predationDeaths += Math.round(killRate + rng.next());
+        }
+      }
+      predationDeaths = Math.min(predationDeaths, slot.population);
+
+      // Starvation: if prey population is low, predators starve
+      if (slot.role === 'predator' || slot.role === 'apex') {
+        let totalPrey = 0;
+        for (const preyId of slot.preyOn) {
+          totalPrey += this.slots.get(preyId)?.population ?? 0;
+        }
+        if (totalPrey < slot.population * 2) {
+          const starvation = Math.round((slot.population - totalPrey * 0.5) * 0.1);
+          if (starvation > 0) {
+            deaths.push({ speciesId: slot.speciesId, count: starvation, cause: 'starvation' });
+            slot.population = Math.max(1, slot.population - starvation);
+          }
+        }
+      }
+
+      // Apply births and predation deaths
+      slot.population = Math.max(1, slot.population + naturalBirths - predationDeaths);
+      slot.population = Math.min(slot.population, slot.capacity);
+
+      if (naturalBirths > 0) births.push({ speciesId: slot.speciesId, count: naturalBirths });
+      if (predationDeaths > 0) deaths.push({ speciesId: slot.speciesId, count: predationDeaths, cause: 'predation' });
+    }
+
+    const pops = Array.from(this.slots.values()).map(s => s.population);
+    const totalPop = pops.reduce((a, b) => a + b, 0);
+
+    // Shannon diversity index
+    let diversity = 0;
+    for (const p of pops) {
+      if (p > 0 && totalPop > 0) {
+        const prop = p / totalPop;
+        diversity -= prop * Math.log(prop);
+      }
+    }
+
+    return { births, deaths, totalPopulation: totalPop, diversity };
+  }
+
+  getSlots(): EcosystemSlot[] {
+    return Array.from(this.slots.values());
+  }
+
+  getTotalPopulation(): number {
+    return Array.from(this.slots.values()).reduce((a, s) => a + s.population, 0);
+  }
+}
+
+/** Generate spawn rules for a world based on biome and zones. */
+export function generateSpawnRules(biome: BiomeType, zones: readonly Zone[], rng: DeterministicRNG): SpawnRule[] {
+  const rules: SpawnRule[] = [];
+
+  // Biome-specific species pools
+  const speciesPools: Record<BiomeType, string[]> = {
+    forest: ['deer', 'wolf', 'bear', 'rabbit', 'owl', 'fox', 'treant'],
+    desert: ['scorpion', 'snake', 'vulture', 'sandworm', 'cactus_golem'],
+    tundra: ['polar_bear', 'wolf_white', 'mammoth', 'ice_elemental', 'frost_spirit'],
+    volcanic: ['fire_salamander', 'magma_golem', 'phoenix_chick', 'lava_serpent'],
+    oceanic: ['shark', 'jellyfish', 'kraken_spawn', 'coral_golem', 'merfolk'],
+    crystal: ['crystal_golem', 'prism_spirit', 'gem_beetle', 'resonance_wisp'],
+    void: ['void_walker', 'shadow_wraith', 'entropy_swarm', 'null_beast'],
+    celestial: ['star_sprite', 'angel_scout', 'cosmic_jellyfish', 'light_wisp'],
+  };
+
+  const pool = speciesPools[biome] ?? [];
+
+  for (const species of pool) {
+    for (const zone of zones) {
+      rules.push({
+        speciesId: species,
+        biome,
+        minDifficulty: zone.difficulty * 0.5,
+        maxDifficulty: zone.difficulty * 1.2,
+        density: zone.entityDensity * (0.5 + rng.next() * 0.5),
+        groupSize: { min: 1, max: 3 + Math.floor(rng.next() * 4) },
+      });
+    }
+  }
+
+  return rules;
+}
+
+/** Build a default ecosystem from a world blueprint. */
+export function buildEcosystem(blueprint: WorldBlueprint, rng: DeterministicRNG): EcosystemSimulator {
+  const eco = new EcosystemSimulator();
+
+  const spawnRules = generateSpawnRules(blueprint.biome, blueprint.zones, rng);
+  const speciesSet = new Set(spawnRules.map(r => r.speciesId));
+
+  const speciesList = Array.from(speciesSet);
+  for (let i = 0; i < speciesList.length; i++) {
+    const id = speciesList[i]!;
+    const isApex = i === speciesList.length - 1;
+    const isPredator = i >= speciesList.length / 2;
+
+    eco.addSlot({
+      speciesId: id,
+      role: isApex ? 'apex' : isPredator ? 'predator' : i === 0 ? 'producer' : 'prey',
+      population: 10 + Math.floor(rng.next() * 40),
+      capacity: isPredator ? 30 : 100,
+      growthRate: isPredator ? 0.05 : 0.15,
+      preferredBiome: blueprint.biome,
+      preyOn: isPredator ? speciesList.slice(0, Math.max(1, Math.floor(speciesList.length / 2))) : [],
+      predators: !isPredator ? speciesList.slice(Math.floor(speciesList.length / 2)) : [],
+    });
+  }
+
+  return eco;
+}

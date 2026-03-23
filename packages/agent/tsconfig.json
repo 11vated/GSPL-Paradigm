@@ -16,6 +16,8 @@
     { "path": "../forge" },
     { "path": "../llm" },
     { "path": "../awareness" },
-    { "path": "../knowledge" }
+    { "path": "../knowledge" },
+    { "path": "../ontology" },
+    { "path": "../concept" }
   ]
 }

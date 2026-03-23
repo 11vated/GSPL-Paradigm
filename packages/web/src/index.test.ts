@@ -981,3 +981,117 @@ describe('Agent Integration', () => {
     expect(body(forgeRes).artifact.content).toContain('<');
   });
 });
+
+// ── End-to-End: Concept → Seed → Shader Pipeline ──
+
+describe('Concept → Seed → Shader Pipeline', () => {
+  let engine: WebEngine;
+
+  beforeEach(() => {
+    engine = new WebEngine();
+  });
+
+  it('compiles "chibi lightning dragon" to a valid entity with GLSL shader', async () => {
+    // Step 1: Compile concept
+    const compileRes = await engine.handle(makeReq({
+      method: 'POST',
+      path: '/api/concept/compile',
+      body: { description: 'chibi lightning dragon' },
+    }));
+    expect(compileRes.status).toBe(201);
+
+    const result = body(compileRes);
+    expect(result.blueprint).toBeDefined();
+    expect(result.seed).toBeDefined();
+    expect(result.blueprint.concept.archetype).toBe('dragon');
+    expect(result.blueprint.concept.bodyStructure).toBe('winged');
+    expect(result.seed.genes.bodyParams).toBeDefined();
+    expect(result.seed.genes.surface).toBeDefined();
+    expect(result.seed.genes.motion).toBeDefined();
+    expect(result.seed.genes.palette).toBeDefined();
+
+    // Step 2: Retrieve the shader for this seed
+    const hash = result.seed.$hash;
+    const shaderRes = await engine.handle(makeReq({
+      method: 'GET',
+      path: `/api/seed/${hash}/shader`,
+    }));
+    expect(shaderRes.status).toBe(200);
+
+    const shaderResult = body(shaderRes);
+    expect(shaderResult.fragmentShader).toBeDefined();
+    expect(shaderResult.vertexShader).toBeDefined();
+    expect(shaderResult.fragmentShader).toContain('#version 300 es');
+    expect(shaderResult.fragmentShader).toContain('mapEntity');
+    expect(shaderResult.fragmentShader.length).toBeGreaterThan(3000);
+  });
+
+  it('creates render-compatible seeds via POST /api/seed/create', async () => {
+    const createRes = await engine.handle(makeReq({
+      method: 'POST',
+      path: '/api/seed/create',
+      body: { name: 'ice necromancer', domain: 'organism' },
+    }));
+    expect(createRes.status).toBe(201);
+
+    const seed = body(createRes).seed;
+    // Verify concept pipeline produced render-compatible genes
+    expect(seed.genes.bodyParams).toBeDefined();
+    expect(seed.genes.bodyStructure).toBeDefined();
+    expect(seed.genes.surface).toBeDefined();
+    expect(seed.genes.palette).toBeDefined();
+  });
+
+  it('produces different shaders for mutated seeds', async () => {
+    // Create original
+    const res1 = await engine.handle(makeReq({
+      method: 'POST',
+      path: '/api/concept/compile',
+      body: { description: 'fire knight' },
+    }));
+    const seed1Hash = body(res1).seed.$hash;
+
+    // Mutate it
+    const mutRes = await engine.handle(makeReq({
+      method: 'POST',
+      path: '/api/seed/mutate',
+      body: { hash: seed1Hash, rate: 0.5 },
+    }));
+    expect(mutRes.status).toBeLessThan(300);
+    const seed2Hash = body(mutRes).mutated.$hash;
+    expect(seed2Hash).not.toBe(seed1Hash);
+
+    // Get shaders for both
+    const shader1Res = await engine.handle(makeReq({ method: 'GET', path: `/api/seed/${seed1Hash}/shader` }));
+    const shader2Res = await engine.handle(makeReq({ method: 'GET', path: `/api/seed/${seed2Hash}/shader` }));
+
+    expect(shader1Res.status).toBe(200);
+    expect(shader2Res.status).toBe(200);
+
+    // Both produce valid shaders, but they should differ (mutation changed gene values)
+    const s1 = body(shader1Res).fragmentShader;
+    const s2 = body(shader2Res).fragmentShader;
+    expect(s1).toContain('mapEntity');
+    expect(s2).toContain('mapEntity');
+    expect(s1).not.toBe(s2);
+  });
+
+  it('handles diverse concept descriptions', async () => {
+    const concepts = [
+      { desc: 'Goku', expectArch: 'warrior', expectBody: 'humanoid' },
+      { desc: 'ghost wraith', expectArch: 'undead', expectBody: 'floating' },
+      { desc: 'robot spider mech', expectArch: 'golem', expectBody: 'mechanical' },
+    ];
+
+    for (const { desc, expectArch, expectBody } of concepts) {
+      const res = await engine.handle(makeReq({
+        method: 'POST',
+        path: '/api/concept/compile',
+        body: { description: desc },
+      }));
+      expect(res.status).toBe(201);
+      expect(body(res).blueprint.concept.archetype).toBe(expectArch);
+      expect(body(res).blueprint.concept.bodyStructure).toBe(expectBody);
+    }
+  });
+});

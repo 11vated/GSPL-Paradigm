@@ -23,6 +23,19 @@ export interface SDFParams {
 
   // Surface (from surface struct gene)
   readonly blendSmoothness: number;
+
+  // v3: Context for face/species variation
+  readonly species: string;
+  readonly style: string;
+
+  // v3: Morphology proportions (drive body plan scaling)
+  readonly headToBodyRatio: number;
+  readonly exaggeration: number;
+  readonly muscularity: number;
+  readonly shoulderWidth: number;
+
+  // v3: Archetype for equipment/behavior inference
+  readonly archetype: string;
 }
 
 /** Material parameters extracted from seed genes. */

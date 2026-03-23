@@ -34,6 +34,22 @@ function colorFromPalette(seed: UniversalSeed, index: number): readonly [number,
   return [0.5, 0.5, 0.5];
 }
 
+/** Read a single component from a vector gene. */
+function vectorComponent(seed: UniversalSeed, geneKey: string, index: number, fallback: number): number {
+  const gene = seed.genes[geneKey];
+  if (gene?.type === 'vector' && gene.value.length > index) {
+    return gene.value[index] ?? fallback;
+  }
+  return fallback;
+}
+
+/** Read a direct scalar gene (not nested in a struct). */
+function scalarDirect(seed: UniversalSeed, geneKey: string, fallback: number): number {
+  const gene = seed.genes[geneKey];
+  if (gene?.type === 'scalar') return gene.value;
+  return fallback;
+}
+
 /**
  * Extract all rendering parameters from a UniversalSeed.
  * Every parameter maps to a specific gene value in the seed.
@@ -53,6 +69,13 @@ export function extractRenderParams(seed: UniversalSeed): RenderParams {
     hasHorns: scalar(seed, 'appendages', 'hasHorns', 0) > 0.5,
     hornSize: scalar(seed, 'appendages', 'hornSize', 0),
     blendSmoothness: scalar(seed, 'surface', 'blendSmoothness', 0.1),
+    species: categorical(seed, 'species', 'unknown'),
+    style: categorical(seed, 'style', 'default'),
+    headToBodyRatio: vectorComponent(seed, 'proportions', 0, 0.2),
+    exaggeration: scalarDirect(seed, 'exaggeration', 0.5),
+    muscularity: 0.5, // Future gene — default for now
+    shoulderWidth: vectorComponent(seed, 'proportions', 2, 1.2),
+    archetype: categorical(seed, 'archetype', 'unknown'),
   };
 
   const material: MaterialParams = {

@@ -14,10 +14,17 @@ import type {
   SecondaryActionElement, ISCAResult, ProportionRules, MorphologyGene,
   ConstraintRule, AbilityDefinition, ConceptModel, EntityBlueprint,
   StyleType, ConceptType, PersonalityVector, SymmetryType,
-  UniversalSeed, GeneMap,
+  UniversalSeed, GeneMap, Gene,
+  PowerSystem, EnergyReservoir, ConversionLayer, ExpressionMechanism,
+  LimitationSystem, ProgressionStage, Transformation, TransformationPhase,
+  CharacterDimension, CharacterIdentity, CharacterMorphology, CharacterAppearance,
+  CharacterPersonality, CharacterLore, SoundDesign, VFXLayer,
+  EntityBlueprintV2, ConceptGraphV2,
 } from '@paradigm/types';
 import { DeterministicRNG, generatePalette, srgbToHex } from '@paradigm/rng';
 import { createSeed } from '@paradigm/seed';
+import { OntologyEngine } from '@paradigm/ontology';
+import type { ComposedConcept } from '@paradigm/ontology';
 
 // ═══════════════════════════════════════════════════════════════════
 // ISCA Keyword Maps (Ported from Sprite Forge brain/isca.py)
@@ -890,6 +897,565 @@ export class ConceptToEntityPipeline {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// OntologyEnricher — Enriches ConceptModel with deep ontology data
+// ═══════════════════════════════════════════════════════════════════
+
+export class OntologyEnricher {
+  private readonly engine: OntologyEngine;
+
+  constructor(engine?: OntologyEngine) {
+    this.engine = engine ?? new OntologyEngine();
+  }
+
+  /** Enrich a concept with ontology analysis. Returns the ontology composition. */
+  enrich(input: string, concept: ConceptModel): { concept: ConceptModel; ontology: ComposedConcept } {
+    const ontology = this.engine.analyze(input);
+
+    // Enrich style with substyle if ontology found a deeper match
+    let enrichedStyle = concept.style;
+    if (ontology.style && ontology.style !== 'default') {
+      const styleDefaults = this.engine.styles.resolve(ontology.style);
+      if (styleDefaults) {
+        enrichedStyle = ontology.style as StyleType;
+      }
+    }
+
+    // Enrich elements from ontology if concept didn't detect them
+    const enrichedElements = concept.elements.length > 0
+      ? concept.elements
+      : ontology.elements;
+
+    // Enrich abilities from ontology
+    const enrichedAbilities: AbilityDefinition[] = [...concept.abilities];
+    for (const abilityId of ontology.abilities) {
+      const abilityNode = this.engine.abilities.get(abilityId);
+      if (abilityNode && !enrichedAbilities.some((a: AbilityDefinition) => a.name === abilityNode.name)) {
+        enrichedAbilities.push({
+          name: abilityNode.name,
+          element: enrichedElements[0] ?? 'none',
+          type: (abilityNode.defaults as Record<string, unknown>)['range'] === 'self' ? 'transformation'
+            : (abilityNode.defaults as Record<string, unknown>)['range'] === 'ranged' ? 'ranged' : 'melee',
+          visualEffect: String((abilityNode.defaults as Record<string, unknown>)['visualSignature'] ?? 'energy_burst'),
+          intensity: 0.7,
+        });
+      }
+    }
+
+    const enrichedConcept: ConceptModel = {
+      ...concept,
+      style: enrichedStyle,
+      elements: enrichedElements,
+      abilities: enrichedAbilities,
+    };
+
+    return { concept: enrichedConcept, ontology };
+  }
+
+  getEngine(): OntologyEngine {
+    return this.engine;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PowerSystemCompiler — Compiles power system into seed genes
+// ═══════════════════════════════════════════════════════════════════
+
+export class PowerSystemCompiler {
+  /** Derive a PowerSystem from ontology analysis and concept data. */
+  derive(concept: ConceptModel, ontology: ComposedConcept, rng: DeterministicRNG): PowerSystem {
+    // Determine energy source from ontology ability matches
+    const abilityIds = ontology.abilities;
+
+    const hasInternalEnergy = abilityIds.some((a: string) =>
+      ['ki', 'chakra', 'nen', 'mana', 'cursed_energy', 'reiatsu'].includes(a));
+    const hasMutation = abilityIds.some((a: string) =>
+      ['quirk', 'devil_fruit', 'stand'].includes(a));
+    const hasExternal = abilityIds.some((a: string) =>
+      ['bending', 'force'].includes(a));
+
+    const reservoir: EnergyReservoir = {
+      type: hasMutation ? 'mutation' : hasExternal ? 'external' : 'internal',
+      capacity: 100,
+      regenerationMethod: hasInternalEnergy ? 'training' : 'rest',
+      regenerationRate: 5,
+      depletionType: 'stamina',
+    };
+
+    const primaryElement = concept.elements[0] ?? 'none';
+    const conversionLayer: ConversionLayer = {
+      system: hasInternalEnergy ? 'nature_typing' : 'direct_will',
+      types: concept.elements.length > 0 ? [...concept.elements] : ['neutral'],
+      userAffinity: concept.elements.length > 0 ? [...concept.elements] : ['neutral'],
+      strengthWeakness: {},
+    };
+
+    // Determine expression mechanism from abilities
+    const hasBeam = ontology.abilities.includes('beam');
+    const hasAura = ontology.abilities.includes('aura');
+    const hasTransform = ontology.abilities.includes('transform');
+
+    const expression: ExpressionMechanism = {
+      activationMethod: hasTransform ? 'willpower' : hasBeam ? 'gesture' : 'willpower',
+      range: hasBeam ? 'ranged' : hasAura ? 'self' : 'melee',
+      manifestationType: hasBeam ? 'beam' : hasAura ? 'aura' : hasTransform ? 'transformation' : 'projectile',
+      visualSignature: `${primaryElement}_energy`,
+      soundSignature: `${primaryElement}_burst`,
+    };
+
+    const limitations: LimitationSystem = {
+      resourceCost: 20 + rng.next() * 30,
+      cooldown: 2 + rng.next() * 8,
+      physicalCost: 'stamina_drain',
+      conditions: [],
+      weaknesses: [],
+      counterMechanisms: ['absorb', 'reflect'],
+    };
+
+    const progression: { type: 'linear' | 'staged' | 'awakening' | 'mastery' | 'transcendence'; stages: ProgressionStage[] } = {
+      type: hasTransform ? 'staged' : 'linear',
+      stages: hasTransform ? [
+        { name: 'Base Form', multiplier: 1.0, trigger: 'default', newAbilities: [], visualChange: 'none' },
+        { name: 'Awakened', multiplier: 2.0, trigger: 'emotion_threshold', newAbilities: ['enhanced_attack'], visualChange: 'aura_intensifies' },
+        { name: 'Mastered', multiplier: 5.0, trigger: 'training_complete', newAbilities: ['ultimate_technique'], visualChange: 'full_transformation' },
+      ] : [
+        { name: 'Novice', multiplier: 1.0, trigger: 'start', newAbilities: [], visualChange: 'none' },
+        { name: 'Adept', multiplier: 1.5, trigger: 'training', newAbilities: ['improved_control'], visualChange: 'subtle_glow' },
+      ],
+    };
+
+    return {
+      name: `${concept.name} Power`,
+      universe: 'GSPL',
+      reservoir,
+      conversionLayer,
+      expression,
+      limitations,
+      progression,
+    };
+  }
+
+  /** Compile PowerSystem into seed genes. */
+  compileGenes(power: PowerSystem): Record<string, Gene> {
+    const genes: Record<string, Gene> = {};
+
+    genes['powerSystem'] = {
+      type: 'struct',
+      value: {
+        energyCapacity: { type: 'scalar' as const, value: typeof power.reservoir.capacity === 'number' ? power.reservoir.capacity : 9999, min: 0, max: 10000 },
+        energyRegen: { type: 'scalar' as const, value: power.reservoir.regenerationRate, min: 0, max: 100 },
+        resourceCost: { type: 'scalar' as const, value: power.limitations.resourceCost, min: 0, max: 100 },
+        cooldown: { type: 'scalar' as const, value: power.limitations.cooldown, min: 0, max: 60 },
+        energyType: { type: 'categorical' as const, value: power.reservoir.type, options: ['internal', 'external', 'mutation', 'equipment'] },
+        conversionSystem: { type: 'categorical' as const, value: power.conversionLayer.system, options: ['nature_typing', 'category', 'school', 'direct_will', 'fruit_classification', 'manifestation', 'bending_type'] },
+        manifestationType: { type: 'categorical' as const, value: power.expression.manifestationType, options: ['beam', 'projectile', 'aura', 'construct', 'summon', 'field', 'transformation', 'manipulation'] },
+        range: { type: 'categorical' as const, value: power.expression.range, options: ['touch', 'melee', 'ranged', 'area', 'global', 'self'] },
+      },
+    };
+
+    // Progression stages as array gene
+    genes['progressionStages'] = {
+      type: 'array',
+      value: power.progression.stages.map(stage => ({
+        type: 'struct' as const,
+        value: {
+          name: { type: 'categorical' as const, value: stage.name, options: [stage.name] },
+          multiplier: { type: 'scalar' as const, value: stage.multiplier, min: 0.5, max: 100 },
+          trigger: { type: 'categorical' as const, value: stage.trigger, options: [stage.trigger] },
+        },
+      })),
+    };
+
+    return genes;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TransformationCompiler — Derives transformation chains
+// ═══════════════════════════════════════════════════════════════════
+
+export class TransformationCompiler {
+  /** Derive transformations from ontology data and power system. */
+  derive(concept: ConceptModel, ontology: ComposedConcept, power: PowerSystem, rng: DeterministicRNG): Transformation[] {
+    const transforms: Transformation[] = [];
+
+    if (power.progression.type !== 'staged' || power.progression.stages.length < 2) {
+      return transforms;
+    }
+
+    const primaryElement = concept.elements[0] ?? 'neutral';
+    const elementColors: Record<string, { from: string; to: string }> = {
+      fire: { from: '#FF6600', to: '#FF0000' },
+      ice: { from: '#88CCFF', to: '#0044FF' },
+      lightning: { from: '#FFFF00', to: '#00AAFF' },
+      dark: { from: '#440066', to: '#000000' },
+      light: { from: '#FFFFFF', to: '#FFD700' },
+      cosmic: { from: '#4400AA', to: '#FF00FF' },
+      nature: { from: '#228B22', to: '#00FF00' },
+      water: { from: '#0066CC', to: '#00CCFF' },
+    };
+
+    const colorShift = elementColors[primaryElement] ?? { from: '#888888', to: '#FFFFFF' };
+
+    // Generate transformation for each stage beyond base
+    for (let i = 1; i < power.progression.stages.length; i++) {
+      const stage = power.progression.stages[i]!;
+      const prevStage = power.progression.stages[i - 1]!;
+
+      const phases: TransformationPhase[] = [
+        {
+          duration: 30,
+          description: 'Energy gathering — aura intensifies',
+          particleEffects: [`${primaryElement}_particles`, 'ground_crack'],
+          colorShift,
+          morphologyChange: 'muscle_tension',
+        },
+        {
+          duration: 20,
+          description: 'Transformation peak — visual change locks in',
+          particleEffects: [`${primaryElement}_burst`, 'shockwave'],
+          colorShift,
+          morphologyChange: stage.visualChange,
+        },
+        {
+          duration: 10,
+          description: 'Stabilization — new form established',
+          particleEffects: [`${primaryElement}_ambient`],
+          colorShift: { from: colorShift.to, to: colorShift.to },
+          morphologyChange: 'none',
+        },
+      ];
+
+      transforms.push({
+        name: stage.name,
+        triggerType: stage.trigger.includes('emotion') ? 'emotion' : 'training',
+        triggerCondition: {
+          requirement: stage.trigger,
+          emotionalState: stage.trigger.includes('emotion') ? 'rage' : undefined,
+          cooldown: 30,
+        },
+        visualProgression: {
+          phases,
+          cinematicCamera: true,
+          screenEffects: ['screen_shake', 'flash_white', 'radial_blur'],
+          soundDesign: 'ascending_tone_explosion',
+        },
+        powerModifier: {
+          multiplier: stage.multiplier,
+          newAbilities: [...stage.newAbilities],
+          enhancedAbilities: [],
+          statChanges: {
+            power: stage.multiplier,
+            speed: 1 + (stage.multiplier - 1) * 0.5,
+            defense: 1 + (stage.multiplier - 1) * 0.3,
+          },
+        },
+        costs: {
+          activationCost: `${Math.round(20 + stage.multiplier * 5)}% energy`,
+          maintenanceCost: `${Math.round(stage.multiplier * 2)} energy/second`,
+          maxDuration: stage.multiplier > 5 ? 60 : 'unlimited',
+          sideEffects: stage.multiplier > 3 ? ['body_strain', 'energy_exhaustion'] : [],
+          revertPenalty: stage.multiplier > 5 ? 'exhaustion_30s' : 'none',
+        },
+        chain: {
+          previous: i > 1 ? power.progression.stages[i - 1]!.name : null,
+          next: i < power.progression.stages.length - 1 ? power.progression.stages[i + 1]!.name : null,
+          requiresPreviousMastery: true,
+        },
+      });
+    }
+
+    return transforms;
+  }
+
+  /** Compile transformations into seed genes. */
+  compileGenes(transforms: readonly Transformation[]): Record<string, Gene> {
+    if (transforms.length === 0) return {};
+
+    return {
+      transformations: {
+        type: 'array',
+        value: transforms.map(t => ({
+          type: 'struct' as const,
+          value: {
+            name: { type: 'categorical' as const, value: t.name, options: [t.name] },
+            triggerType: { type: 'categorical' as const, value: t.triggerType, options: ['training', 'emotion', 'item', 'fusion', 'awakening', 'ritual'] },
+            multiplier: { type: 'scalar' as const, value: t.powerModifier.multiplier, min: 1, max: 100 },
+            cinematicCamera: { type: 'scalar' as const, value: t.visualProgression.cinematicCamera ? 1 : 0, min: 0, max: 1 },
+            duration: { type: 'scalar' as const, value: typeof t.costs.maxDuration === 'number' ? t.costs.maxDuration : 9999, min: 0, max: 10000 },
+          },
+        })),
+      },
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ConstraintSolver — Validates and adjusts seed genes against rules
+// ═══════════════════════════════════════════════════════════════════
+
+export interface ConstraintViolation {
+  readonly rule: string;
+  readonly severity: 'warning' | 'error';
+  readonly message: string;
+  readonly autoFixed: boolean;
+}
+
+export class ConstraintSolver {
+  /** Validate seed genes against quality constraints. Returns violations found. */
+  validate(concept: ConceptModel, genes: GeneMap): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+
+    // Proportion check: head radius must match style
+    const bodyParams = genes['bodyParams'];
+    if (bodyParams?.type === 'struct') {
+      const headRadius = bodyParams.value['headRadius'];
+      if (headRadius?.type === 'scalar') {
+        const isChibi = concept.style === 'cartoon' || concept.style === 'default';
+        if (isChibi && headRadius.value < 0.2) {
+          violations.push({
+            rule: 'proportion_head_chibi',
+            severity: 'warning',
+            message: `Chibi/cartoon style expects larger head (got ${headRadius.value.toFixed(2)}, expected >= 0.2)`,
+            autoFixed: false,
+          });
+        }
+        if (!isChibi && headRadius.value > 0.35) {
+          violations.push({
+            rule: 'proportion_head_realistic',
+            severity: 'warning',
+            message: `Realistic style expects smaller head (got ${headRadius.value.toFixed(2)}, expected <= 0.35)`,
+            autoFixed: false,
+          });
+        }
+      }
+    }
+
+    // Wing anatomy: if entity declares flight, must have wings or floating body
+    const appendages = genes['appendages'];
+    const bodyStructure = genes['bodyStructure'];
+    if (bodyStructure?.type === 'categorical' && appendages?.type === 'struct') {
+      const hasWings = appendages.value['hasWings'];
+      if (hasWings?.type === 'scalar' && hasWings.value < 0.5 &&
+          bodyStructure.value !== 'floating' &&
+          concept.suggestedAnimations.includes('fly')) {
+        violations.push({
+          rule: 'anatomy_flight',
+          severity: 'warning',
+          message: 'Entity has fly animation but no wings and non-floating body structure',
+          autoFixed: false,
+        });
+      }
+    }
+
+    // Power balance: if power system exists, must have limitations
+    const powerSystem = genes['powerSystem'];
+    if (powerSystem?.type === 'struct') {
+      const cost = powerSystem.value['resourceCost'];
+      if (cost?.type === 'scalar' && cost.value < 5) {
+        violations.push({
+          rule: 'power_balance',
+          severity: 'warning',
+          message: `Power system has very low resource cost (${cost.value.toFixed(1)}), may be unbalanced`,
+          autoFixed: false,
+        });
+      }
+    }
+
+    return violations;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CharacterDimensionCompiler — Produces full 12-dimension output
+// ═══════════════════════════════════════════════════════════════════
+
+export class CharacterDimensionCompiler {
+  /** Compile the 12-dimension character decomposition from concept + ontology. */
+  compile(concept: ConceptModel, ontology: ComposedConcept, power: PowerSystem, transforms: readonly Transformation[]): Partial<CharacterDimension> {
+    const identity: CharacterIdentity = {
+      name: concept.name,
+      aliases: [],
+      universe: 'GSPL',
+      role: concept.archetype === 'royalty' ? 'protagonist'
+        : concept.archetype === 'villager' ? 'support'
+        : concept.archetype === 'merchant' ? 'support'
+        : 'protagonist',
+      age: { actual: 25, visual: 25 },
+    };
+
+    const morphology: CharacterMorphology = {
+      species: concept.species,
+      bodyType: concept.morphology.exaggeration > 0.5 ? 'stylized' : 'mesomorph',
+      proportions: {
+        headToBody: concept.morphology.proportions.headToBodyRatio,
+        limbRatios: [concept.morphology.proportions.limbToBodyRatio],
+      },
+      height: 1.7,
+      distinguishingFeatures: ontology.emergentProperties.length > 0 ? [...ontology.emergentProperties] : [],
+      bodyStructure: concept.bodyStructure,
+    };
+
+    const primaryColor = concept.colors[0] ?? '#888888';
+    const appearance: CharacterAppearance = {
+      colorPalette: { primary: primaryColor, secondary: concept.colors[1] ?? '#444444', accent: concept.colors[2] ?? '#FFFFFF' },
+      hair: { color: '#333333', style: 'default', length: 0.5, physics: 'flowing' },
+      eyes: { shape: 'standard', color: '#442200' },
+      clothing: concept.equipmentLayers.length > 0 ? [...concept.equipmentLayers] : ['default_outfit'],
+      silhouetteSignature: `${concept.bodyStructure}_${concept.archetype}`,
+    };
+
+    const personality: CharacterPersonality = {
+      bigFive: {
+        openness: concept.personality.openness,
+        conscientiousness: concept.personality.conscientiousness,
+        extraversion: concept.personality.extraversion,
+        agreeableness: concept.personality.agreeableness,
+        neuroticism: concept.personality.neuroticism,
+      },
+      traits: [concept.archetype],
+      archetypeRole: concept.archetype,
+      emotionalProcessing: concept.personality.neuroticism > 0.7 ? 'explosive' : 'rational',
+      speechPattern: { formality: 0.5, vocabulary: 'standard', catchphrases: [] },
+      humorStyle: concept.personality.wit > 0.7 ? 'sarcasm' : 'none',
+      mannerisms: [],
+    };
+
+    const lore: CharacterLore = {
+      origin: { birthplace: 'Unknown', socialClass: 'common', childhoodEvents: [] },
+      traumas: [],
+      motivations: { surface: 'adventure', coreNeed: 'purpose', originalWound: 'none' },
+    };
+
+    const sound: SoundDesign = {
+      voice: {
+        pitch: concept.bodyStructure === 'floating' ? 0.8 : 0.5,
+        tone: concept.archetype === 'mage' ? 'resonant' : 'standard',
+        effects: concept.elements.includes('dark') ? ['reverb'] : [],
+      },
+    };
+
+    return {
+      identity,
+      morphology,
+      appearance,
+      personality,
+      relationships: [],
+      lore,
+      powerSystem: power,
+      visualStyle: {
+        category: ontology.style ?? concept.style,
+        substyle: ontology.substyle ?? concept.style,
+        frameRate: 24,
+      },
+      sound,
+      movement: {
+        personality: concept.archetype === 'rogue' ? 'stealthy' : concept.archetype === 'warrior' ? 'confident' : 'neutral',
+        walkCycle: `${concept.bodyStructure}_walk`,
+        combatMovement: concept.archetype,
+      },
+      animationComplexity: {
+        baseFrameRate: 24,
+        techniques: ontology.style === 'shonen' ? ['speed_lines', 'impact_frames', 'smear_frames']
+          : ontology.style === 'ufotable' ? ['bloom', 'volumetric', 'particle_heavy']
+          : ontology.style === 'chibi' ? ['bouncy_timing', 'exaggerated_expressions']
+          : ontology.style === 'looney_tunes' ? ['gravity_delay', 'elastic_recovery', 'squash_stretch_200']
+          : ['standard_animation'],
+      },
+      evolutionPotential: {
+        strategy: 'uniform',
+        mutationSensitivity: 0.3,
+      },
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Enhanced Pipeline — Upgraded with ontology, power, transforms
+// ═══════════════════════════════════════════════════════════════════
+
+export class EnhancedConceptPipeline {
+  private readonly interpreter = new ConceptInterpreter();
+  private readonly compiler = new ConceptCompiler();
+  private readonly canonical = new CanonicalDatabase();
+  private readonly enricher: OntologyEnricher;
+  private readonly powerCompiler = new PowerSystemCompiler();
+  private readonly transformCompiler = new TransformationCompiler();
+  private readonly constraintSolver = new ConstraintSolver();
+  private readonly dimensionCompiler = new CharacterDimensionCompiler();
+
+  constructor(ontologyEngine?: OntologyEngine) {
+    this.enricher = new OntologyEnricher(ontologyEngine);
+  }
+
+  execute(input: string, rng: DeterministicRNG, options?: { style?: StyleType; useCanonical?: boolean }): EntityBlueprintV2 {
+    // Step 1: Base concept interpretation
+    let concept = this.interpreter.interpret(input, options?.style);
+
+    // Step 2: Canonical matching
+    const useCanonical = options?.useCanonical !== false;
+    if (useCanonical) {
+      const match = this.canonical.match(input);
+      if (match) {
+        concept = { ...concept, ...match.entry.overrides, morphology: concept.morphology, constraints: concept.constraints, isca: concept.isca, suggestedAnimations: concept.suggestedAnimations, secondaryActions: concept.secondaryActions, equipmentLayers: concept.equipmentLayers, personality: concept.personality, name: concept.name, conceptType: concept.conceptType } as ConceptModel;
+      }
+    }
+
+    // Step 3: Ontology enrichment
+    const { concept: enrichedConcept, ontology } = this.enricher.enrich(input, concept);
+
+    // Step 4: Compile base seed (preserves render-compatible genes)
+    const baseSeed = this.compiler.compile(enrichedConcept, rng);
+
+    // Step 5: Derive power system
+    const powerSystem = this.powerCompiler.derive(enrichedConcept, ontology, rng);
+    const powerGenes = this.powerCompiler.compileGenes(powerSystem);
+
+    // Step 6: Derive transformations
+    const transformations = this.transformCompiler.derive(enrichedConcept, ontology, powerSystem, rng);
+    const transformGenes = this.transformCompiler.compileGenes(transformations);
+
+    // Step 7: Merge all genes into final seed
+    const mergedGenes: GeneMap = { ...baseSeed.genes, ...powerGenes, ...transformGenes };
+
+    // Step 8: Validate constraints
+    const violations = this.constraintSolver.validate(enrichedConcept, mergedGenes);
+
+    // Step 9: Create final seed with merged genes
+    const finalSeed = createSeed(enrichedConcept.name, 'organism', mergedGenes, rng);
+
+    // Step 10: Compile 12-dimension character decomposition
+    const dimensions = this.dimensionCompiler.compile(enrichedConcept, ontology, powerSystem, transformations);
+
+    return {
+      conceptGraph: {
+        nodes: ontology.allMatches.map((m: { matchedText: string; taxonomy: string; confidence: number }, i: number) => ({
+          id: `node_${i}`,
+          value: m.matchedText,
+          taxonomy: m.taxonomy,
+          confidence: m.confidence,
+          relationships: [],
+        })),
+        identity: dimensions.identity ? { ...dimensions.identity } : {},
+        morphology: dimensions.morphology ? { ...dimensions.morphology } : {},
+        appearance: dimensions.appearance ? { ...dimensions.appearance } : {},
+        personality: dimensions.personality ? { ...dimensions.personality } : {},
+        powerSystem: { ...powerSystem },
+        transformations,
+      },
+      seed: finalSeed,
+      dimensions,
+      validationStatus: violations.some(v => v.severity === 'error') ? 'invalid' : 'valid',
+      validationErrors: violations.map(v => v.message),
+    };
+  }
+
+  /** Access the ontology engine for direct taxonomy queries. */
+  getOntology(): OntologyEngine {
+    return this.enricher.getEngine();
+  }
+}
+
 // Re-export Sprite Forge integration
 export { SpriteForgeIntegration } from './sprite-forge.js';
 export type { SpriteForgeResult, GenerationOptions } from './sprite-forge.js';
@@ -897,3 +1463,7 @@ export type { SpriteForgeResult, GenerationOptions } from './sprite-forge.js';
 // Re-export Agentic Co-Creation
 export { AgenticCoCreator } from './co-creation.js';
 export type { CoCreationResult } from './co-creation.js';
+
+// Re-export Ontology
+export { OntologyEngine } from '@paradigm/ontology';
+export type { ComposedConcept } from '@paradigm/ontology';

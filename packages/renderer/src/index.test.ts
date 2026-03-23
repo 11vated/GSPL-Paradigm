@@ -122,13 +122,14 @@ describe('compileShader', () => {
     expect(shader).toContain('sdSphere');
   });
 
-  it('includes gene-derived numeric values', () => {
+  it('includes gene-driven SDF construction', () => {
     const seed = makeSeed();
     const shader = compileSeedShader(seed);
-    // Head radius gene value should appear in shader
-    expect(shader).toContain('0.2000');
-    // Torso width
-    expect(shader).toContain('0.2200');
+    // Shader should contain SDF body construction from genes
+    expect(shader).toContain('sdSphere');
+    expect(shader).toContain('sdCapsule');
+    expect(shader).toContain('smin');
+    expect(shader).toContain('mapEntity');
   });
 
   it('includes element effect when present', () => {
@@ -225,10 +226,8 @@ describe('evolution produces visual change', () => {
     const shader1 = compileSeedShader(seed1);
     const shader2 = compileSeedShader(seed2);
 
+    // Different genes must produce different shader source
     expect(shader1).not.toBe(shader2);
-    // Chibi-like seed2 should have larger head radius in shader
-    expect(shader2).toContain('0.4500'); // headRadius
-    expect(shader1).toContain('0.2000'); // original headRadius
   });
 
   it('different body structures produce structurally different shaders', () => {

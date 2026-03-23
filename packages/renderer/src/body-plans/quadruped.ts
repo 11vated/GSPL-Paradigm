@@ -1,4 +1,5 @@
 import type { BodyPlan, SDFParams } from '../types.js';
+import { compileFace, defaultFaceParams } from '../body-parts/face.js';
 
 const f = (n: number): string => n.toFixed(4);
 
@@ -28,6 +29,12 @@ export const quadrupedPlan: BodyPlan = {
   float body = smin(torso, head, ${k});
   body = smin(body, frontLegs, ${k});
   body = smin(body, backLegs, ${k});`;
+
+    // Face features for quadrupeds (animal eyes, ears)
+    const headY = p.torsoHeight * 0.4;
+    const headZ = p.torsoHeight + p.neckLength;
+    const faceParams = defaultFaceParams(p.headRadius, headY, p.species ?? 'beast', p.style ?? 'default');
+    glsl += compileFace(faceParams);
 
     if (p.hasTail) {
       glsl += `
