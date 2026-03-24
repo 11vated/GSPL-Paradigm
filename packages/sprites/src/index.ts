@@ -1202,3 +1202,269 @@ export class SpriteEngine {
     }
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// BonePose — Animation pose data
+// ═══════════════════════════════════════════════════════════════════
+
+export interface BonePose {
+  readonly boneName: string;
+  readonly rotationOffset: { readonly x: number; readonly y: number; readonly z: number };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PoseLibrary — Pre-defined animation poses per body type
+// ═══════════════════════════════════════════════════════════════════
+
+export class PoseLibrary {
+  /** Neutral idle pose (all offsets near zero with subtle breathing). */
+  getIdlePose(bodyStructure: string, frame: number, totalFrames: number): BonePose[] {
+    const breathCycle = Math.sin((frame / totalFrames) * Math.PI * 2) * 0.03;
+
+    if (bodyStructure === 'humanoid' || bodyStructure === 'winged') {
+      return [
+        { boneName: 'chest', rotationOffset: { x: breathCycle, y: 0, z: 0 } },
+        { boneName: 'head', rotationOffset: { x: breathCycle * 0.5, y: 0, z: 0 } },
+        { boneName: 'upper_arm.L', rotationOffset: { x: 0, y: 0, z: breathCycle * 0.5 } },
+        { boneName: 'upper_arm.R', rotationOffset: { x: 0, y: 0, z: -breathCycle * 0.5 } },
+      ];
+    }
+
+    if (bodyStructure === 'quadruped') {
+      return [
+        { boneName: 'spine', rotationOffset: { x: breathCycle, y: 0, z: 0 } },
+        { boneName: 'head', rotationOffset: { x: breathCycle * 0.5, y: 0, z: 0 } },
+        { boneName: 'tail', rotationOffset: { x: 0, y: Math.sin((frame / totalFrames) * Math.PI * 4) * 0.1, z: 0 } },
+      ];
+    }
+
+    return [{ boneName: 'root', rotationOffset: { x: breathCycle, y: 0, z: 0 } }];
+  }
+
+  /** Walk cycle with alternating limb swings. */
+  getWalkPose(bodyStructure: string, frame: number, totalFrames: number): BonePose[] {
+    const t = (frame / totalFrames) * Math.PI * 2;
+    const swing = Math.sin(t) * 0.4;
+    const counterSwing = Math.sin(t + Math.PI) * 0.4;
+
+    if (bodyStructure === 'humanoid' || bodyStructure === 'winged') {
+      return [
+        { boneName: 'thigh.L', rotationOffset: { x: swing, y: 0, z: 0 } },
+        { boneName: 'thigh.R', rotationOffset: { x: counterSwing, y: 0, z: 0 } },
+        { boneName: 'shin.L', rotationOffset: { x: Math.max(0, -swing) * 0.6, y: 0, z: 0 } },
+        { boneName: 'shin.R', rotationOffset: { x: Math.max(0, -counterSwing) * 0.6, y: 0, z: 0 } },
+        { boneName: 'upper_arm.L', rotationOffset: { x: counterSwing * 0.5, y: 0, z: 0 } },
+        { boneName: 'upper_arm.R', rotationOffset: { x: swing * 0.5, y: 0, z: 0 } },
+        { boneName: 'spine', rotationOffset: { x: 0, y: Math.sin(t) * 0.05, z: 0 } },
+      ];
+    }
+
+    if (bodyStructure === 'quadruped') {
+      return [
+        { boneName: 'hip.L', rotationOffset: { x: swing, y: 0, z: 0 } },
+        { boneName: 'hip.R', rotationOffset: { x: counterSwing, y: 0, z: 0 } },
+        { boneName: 'upper_leg.L', rotationOffset: { x: swing * 0.5, y: 0, z: 0 } },
+        { boneName: 'upper_leg.R', rotationOffset: { x: counterSwing * 0.5, y: 0, z: 0 } },
+        { boneName: 'spine', rotationOffset: { x: Math.sin(t * 2) * 0.03, y: 0, z: 0 } },
+      ];
+    }
+
+    return [];
+  }
+
+  /** Basic attack pose (weapon swing or claw/bite). */
+  getAttackPose(bodyStructure: string, frame: number, totalFrames: number): BonePose[] {
+    const t = frame / totalFrames;
+    // 3 phases: windup (0-0.3), swing (0.3-0.6), recovery (0.6-1.0)
+    const windupEnd = 0.3;
+    const swingEnd = 0.6;
+
+    let armAngle = 0;
+    if (t < windupEnd) {
+      armAngle = -(t / windupEnd) * 1.2; // pull back
+    } else if (t < swingEnd) {
+      const swingT = (t - windupEnd) / (swingEnd - windupEnd);
+      armAngle = -1.2 + swingT * 2.8; // swing forward past neutral
+    } else {
+      const recoveryT = (t - swingEnd) / (1.0 - swingEnd);
+      armAngle = 1.6 * (1 - recoveryT); // return to rest
+    }
+
+    if (bodyStructure === 'humanoid' || bodyStructure === 'winged') {
+      return [
+        { boneName: 'upper_arm.R', rotationOffset: { x: armAngle, y: 0, z: 0 } },
+        { boneName: 'forearm.R', rotationOffset: { x: armAngle * 0.5, y: 0, z: 0 } },
+        { boneName: 'chest', rotationOffset: { x: 0, y: armAngle * 0.2, z: 0 } },
+      ];
+    }
+
+    if (bodyStructure === 'quadruped' || bodyStructure === 'winged') {
+      return [
+        { boneName: 'head', rotationOffset: { x: armAngle * 0.8, y: 0, z: 0 } },
+        { boneName: 'neck', rotationOffset: { x: armAngle * 0.4, y: 0, z: 0 } },
+      ];
+    }
+
+    return [];
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SkeletonToSpriteRasterizer — Skeleton → 2D Pixel Art
+// ═══════════════════════════════════════════════════════════════════
+
+/** Skeleton bone in 2D screen space after projection. */
+interface ScreenBone {
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly parentX: number;
+  readonly parentY: number;
+  readonly hasParent: boolean;
+}
+
+/**
+ * Converts a 3D skeleton into 2D pixel art via orthographic front-view projection.
+ * Draws body segments between connected bones with style-appropriate line thickness
+ * and fills. Produces PixelData suitable for sprite sheet assembly.
+ */
+export class SkeletonToSpriteRasterizer {
+  /**
+   * Rasterize a skeleton into a single frame of pixel art.
+   *
+   * @param bones - Array of { name, position: {x,y,z}, parentIndex } bones
+   * @param frameWidth - Output frame width in pixels
+   * @param frameHeight - Output frame height in pixels
+   * @param palette - RGB colors to use (index 0 = primary body, 1 = accent, 2 = outline)
+   * @param style - Art style affecting line thickness and rendering
+   */
+  rasterize(
+    bones: ReadonlyArray<{ name: string; position: { x: number; y: number; z: number }; parentIndex: number }>,
+    frameWidth: number,
+    frameHeight: number,
+    palette: RGBColor[],
+    style: string,
+  ): PixelData {
+    // Create empty pixel grid (transparent)
+    const pixels: number[][] = [];
+    for (let y = 0; y < frameHeight; y++) {
+      pixels.push(new Array(frameWidth).fill(0));
+    }
+
+    // Project bones to 2D screen space (front view: X→screen X, Y→screen Y, ignore Z)
+    const screenBones = this.projectBones(bones, frameWidth, frameHeight);
+
+    // Style parameters
+    const lineThickness = style === 'cartoon' || style === 'chibi' ? 3 : style === 'pixel' ? 1 : 2;
+    const bodyRadius = style === 'cartoon' || style === 'chibi' ? 4 : style === 'pixel' ? 2 : 3;
+    const outlineColor = palette[2] ?? { r: 30, g: 30, b: 40 };
+    const bodyColor = palette[0] ?? { r: 120, g: 160, b: 200 };
+    const accentColor = palette[1] ?? { r: 200, g: 160, b: 80 };
+
+    // Draw outline (slightly larger)
+    for (const bone of screenBones) {
+      if (bone.hasParent) {
+        this.drawLine(pixels, frameWidth, frameHeight, bone.parentX, bone.parentY, bone.x, bone.y, lineThickness + 1, outlineColor);
+      }
+      this.drawCircle(pixels, frameWidth, frameHeight, bone.x, bone.y, bodyRadius + 1, outlineColor);
+    }
+
+    // Draw body fill
+    for (const bone of screenBones) {
+      if (bone.hasParent) {
+        this.drawLine(pixels, frameWidth, frameHeight, bone.parentX, bone.parentY, bone.x, bone.y, lineThickness, bodyColor);
+      }
+      const isHead = bone.name === 'head';
+      const radius = isHead ? bodyRadius + 2 : bodyRadius;
+      const color = isHead ? accentColor : bodyColor;
+      this.drawCircle(pixels, frameWidth, frameHeight, bone.x, bone.y, radius, color);
+    }
+
+    return { width: frameWidth, height: frameHeight, pixels };
+  }
+
+  private projectBones(
+    bones: ReadonlyArray<{ name: string; position: { x: number; y: number; z: number }; parentIndex: number }>,
+    fw: number,
+    fh: number,
+  ): ScreenBone[] {
+    // Compute world positions by walking the hierarchy
+    const worldPositions: Array<{ x: number; y: number; z: number }> = [];
+    for (let i = 0; i < bones.length; i++) {
+      const bone = bones[i]!;
+      if (bone.parentIndex < 0) {
+        worldPositions.push({ x: bone.position.x, y: bone.position.y, z: bone.position.z });
+      } else {
+        const parent = worldPositions[bone.parentIndex]!;
+        worldPositions.push({
+          x: parent.x + bone.position.x,
+          y: parent.y + bone.position.y,
+          z: parent.z + bone.position.z,
+        });
+      }
+    }
+
+    // Find bounding box for centering
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const wp of worldPositions) {
+      if (wp.x < minX) minX = wp.x;
+      if (wp.x > maxX) maxX = wp.x;
+      if (wp.y < minY) minY = wp.y;
+      if (wp.y > maxY) maxY = wp.y;
+    }
+
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+    const scale = Math.min((fw - 12) / rangeX, (fh - 12) / rangeY);
+    const cx = fw / 2;
+    const cy = fh / 2;
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+
+    return bones.map((bone, i) => {
+      const wp = worldPositions[i]!;
+      const sx = Math.round(cx + (wp.x - midX) * scale);
+      const sy = Math.round(cy - (wp.y - midY) * scale); // flip Y
+
+      let parentSx = sx;
+      let parentSy = sy;
+      if (bone.parentIndex >= 0) {
+        const pwp = worldPositions[bone.parentIndex]!;
+        parentSx = Math.round(cx + (pwp.x - midX) * scale);
+        parentSy = Math.round(cy - (pwp.y - midY) * scale);
+      }
+
+      return { name: bone.name, x: sx, y: sy, parentX: parentSx, parentY: parentSy, hasParent: bone.parentIndex >= 0 };
+    });
+  }
+
+  private drawCircle(pixels: number[][], fw: number, fh: number, cx: number, cy: number, radius: number, color: RGBColor): void {
+    const packed = packRGBA(color.r, color.g, color.b, 255);
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (dx * dx + dy * dy <= radius * radius) {
+          const px = cx + dx;
+          const py = cy + dy;
+          if (px >= 0 && px < fw && py >= 0 && py < fh) {
+            pixels[py]![px] = packed;
+          }
+        }
+      }
+    }
+  }
+
+  private drawLine(pixels: number[][], fw: number, fh: number, x0: number, y0: number, x1: number, y1: number, thickness: number, color: RGBColor): void {
+    // Bresenham with thickness via perpendicular circles
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const steps = Math.max(dx, dy, 1);
+    const halfThick = Math.floor(thickness / 2);
+
+    for (let i = 0; i <= steps; i++) {
+      const t = steps > 0 ? i / steps : 0;
+      const x = Math.round(x0 + (x1 - x0) * t);
+      const y = Math.round(y0 + (y1 - y0) * t);
+      this.drawCircle(pixels, fw, fh, x, y, halfThick, color);
+    }
+  }
+}

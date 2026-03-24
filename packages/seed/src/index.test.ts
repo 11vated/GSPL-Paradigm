@@ -143,7 +143,7 @@ describe('breedSeeds', () => {
     const b = createSeed('mage', 'organism', makeGenes(), makeRng(2));
     const child = breedSeeds(a, b, 'uniform', 0.6, makeRng(3));
 
-    expect(child.$name).toBe('knight+mage');
+    expect(child.$name).toBe('knight\u00d7mage');
     expect(child.$lineage.parents.length).toBe(2);
     expect(child.$lineage.parents[0]?.name).toBe('knight');
     expect(child.$lineage.parents[1]?.name).toBe('mage');

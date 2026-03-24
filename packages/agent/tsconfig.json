@@ -10,8 +10,14 @@
   "references": [
     { "path": "../types" },
     { "path": "../rng" },
+    { "path": "../seed" },
+    { "path": "../events" },
+    { "path": "../evolution" },
+    { "path": "../forge" },
     { "path": "../llm" },
     { "path": "../awareness" },
-    { "path": "../knowledge" }
+    { "path": "../knowledge" },
+    { "path": "../ontology" },
+    { "path": "../concept" }
   ]
 }

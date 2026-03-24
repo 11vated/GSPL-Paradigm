@@ -544,3 +544,573 @@ export interface LLMProvider {
   readonly name: string;
   chat(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse>;
 }
+
+// ─────────────────────────────────────────────
+// ISCA Types (Sprite Concept Analysis)
+// ─────────────────────────────────────────────
+
+export type CharacterArchetype =
+  | 'warrior' | 'mage' | 'archer' | 'rogue' | 'knight'
+  | 'berserker' | 'paladin' | 'healer' | 'bard' | 'summoner'
+  | 'beast' | 'undead' | 'elemental' | 'dragon' | 'demon'
+  | 'golem' | 'merchant' | 'villager' | 'royalty' | 'guard'
+  | 'unknown';
+
+export type BodyStructure =
+  | 'humanoid' | 'quadruped' | 'winged' | 'serpentine'
+  | 'amorphous' | 'mechanical' | 'multi_limbed' | 'floating';
+
+export type AnimationCapability =
+  | 'can_walk' | 'can_run' | 'can_jump' | 'can_fly' | 'can_swim'
+  | 'can_attack_melee' | 'can_attack_ranged' | 'can_cast'
+  | 'can_crouch' | 'can_climb' | 'can_sprint' | 'can_dash' | 'can_block';
+
+export type SecondaryActionElement =
+  | 'hair' | 'cape' | 'tail' | 'cloth' | 'chains' | 'wings';
+
+export interface ISCAResult {
+  readonly archetype: CharacterArchetype;
+  readonly bodyStructure: BodyStructure;
+  readonly capabilities: readonly AnimationCapability[];
+  readonly weapons: readonly string[];
+  readonly armor: readonly string[];
+  readonly elements: readonly string[];
+  readonly colors: readonly string[];
+  readonly keywords: readonly string[];
+  readonly suggestedAnimations: readonly string[];
+  readonly secondaryActionElements: readonly SecondaryActionElement[];
+  readonly secondaryActionDelayFrames: number;
+  readonly requiresSeparateLayers: boolean;
+  readonly equipmentLayers: readonly string[];
+  readonly smearFramesNeeded: number;
+}
+
+// ─────────────────────────────────────────────
+// Morphology Types
+// ─────────────────────────────────────────────
+
+export type SymmetryType = 'bilateral' | 'radial' | 'asymmetric';
+
+export interface ProportionRules {
+  readonly headToBodyRatio: number;
+  readonly limbToBodyRatio: number;
+  readonly shoulderToHipRatio: number;
+  readonly eyeToHeadRatio: number;
+}
+
+export interface MorphologyGene {
+  readonly bodyStructure: BodyStructure;
+  readonly proportions: ProportionRules;
+  readonly symmetry: SymmetryType;
+  readonly exaggeration: number;
+  readonly skeletonOverrides: Record<string, { scaleX: number; scaleY: number }>;
+}
+
+// ─────────────────────────────────────────────
+// Constraint Types
+// ─────────────────────────────────────────────
+
+export type ConstraintCategory =
+  | 'proportion' | 'symmetry' | 'silhouette' | 'readability' | 'style';
+
+export interface ConstraintRule {
+  readonly id: string;
+  readonly category: ConstraintCategory;
+  readonly description: string;
+  readonly priority: number;
+  readonly check: string;
+}
+
+// ─────────────────────────────────────────────
+// Ability Definition
+// ─────────────────────────────────────────────
+
+export interface AbilityDefinition {
+  readonly name: string;
+  readonly element: string;
+  readonly type: 'melee' | 'ranged' | 'magic' | 'passive' | 'transformation';
+  readonly visualEffect: string;
+  readonly intensity: number;
+}
+
+// ─────────────────────────────────────────────
+// Concept Model (Full character description)
+// ─────────────────────────────────────────────
+
+export interface ConceptModel {
+  readonly name: string;
+  readonly conceptType: ConceptType;
+  readonly archetype: CharacterArchetype;
+  readonly bodyStructure: BodyStructure;
+  readonly species: string;
+  readonly personality: PersonalityVector;
+  readonly style: StyleType;
+  readonly abilities: readonly AbilityDefinition[];
+  readonly elements: readonly string[];
+  readonly weapons: readonly string[];
+  readonly armor: readonly string[];
+  readonly colors: readonly string[];
+  readonly suggestedAnimations: readonly string[];
+  readonly secondaryActions: readonly SecondaryActionElement[];
+  readonly equipmentLayers: readonly string[];
+  readonly morphology: MorphologyGene;
+  readonly constraints: readonly ConstraintRule[];
+  readonly isca: ISCAResult;
+}
+
+// ─────────────────────────────────────────────
+// Entity Blueprint (Seed + visual + behavior)
+// ─────────────────────────────────────────────
+
+export interface EntityBlueprint {
+  readonly concept: ConceptModel;
+  readonly seed: UniversalSeed;
+  readonly skeletonType: BodyStructure;
+  readonly spriteConfig: {
+    readonly frameWidth: number;
+    readonly frameHeight: number;
+    readonly animations: readonly string[];
+    readonly fps: number;
+  };
+}
+
+// ─────────────────────────────────────────────
+// Result Type — Typed error handling
+// ─────────────────────────────────────────────
+
+/** Success variant of Result. */
+export interface Ok<T> {
+  readonly ok: true;
+  readonly value: T;
+}
+
+/** Failure variant of Result. */
+export interface Err<E = ParadigmError> {
+  readonly ok: false;
+  readonly error: E;
+}
+
+/**
+ * Discriminated union for typed error handling.
+ * Use instead of try/catch at module boundaries.
+ *
+ * @example
+ * ```ts
+ * function divide(a: number, b: number): Result<number> {
+ *   if (b === 0) return { ok: false, error: new ParadigmError('Division by zero', 'MATH_ERROR') };
+ *   return { ok: true, value: a / b };
+ * }
+ * ```
+ */
+export type Result<T, E = ParadigmError> = Ok<T> | Err<E>;
+
+/** Create a success Result. */
+export function ok<T>(value: T): Ok<T> {
+  return { ok: true, value };
+}
+
+/** Create a failure Result. */
+export function err<E = ParadigmError>(error: E): Err<E> {
+  return { ok: false, error };
+}
+
+// ─────────────────────────────────────────────
+// ParadigmError — Structured error base class
+// ─────────────────────────────────────────────
+
+/**
+ * Base error class for all GSPL Paradigm errors.
+ * Provides structured context for debugging, logging, and user-facing messages.
+ */
+export class ParadigmError extends Error {
+  /** Machine-readable error code (e.g., 'STORE_ERROR', 'EVOLUTION_DIVERGED'). */
+  readonly code: string;
+  /** Additional structured context for debugging. */
+  readonly context: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    code: string = 'PARADIGM_ERROR',
+    context: Record<string, unknown> = {},
+  ) {
+    super(message);
+    this.name = 'ParadigmError';
+    this.code = code;
+    this.context = context;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Paginated Response — API list endpoints
+// ─────────────────────────────────────────────
+
+/** Paginated response wrapper for list API endpoints. */
+export interface PaginatedResponse<T> {
+  readonly items: T[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly hasMore: boolean;
+}
+
+// ─────────────────────────────────────────────
+// WebSocket Message — Bidirectional comms
+// ─────────────────────────────────────────────
+
+/** WebSocket message types for client-server communication. */
+export type WebSocketMessageType =
+  | 'seed.create' | 'seed.mutate' | 'seed.breed' | 'seed.delete'
+  | 'evolution.start' | 'evolution.pause' | 'evolution.step'
+  | 'forge.request' | 'forge.cancel'
+  | 'agent.message' | 'agent.approve_tool'
+  | 'subscribe' | 'unsubscribe'
+  | 'event' | 'error' | 'ack';
+
+/** Bidirectional WebSocket message envelope. */
+export interface WebSocketMessage<T = unknown> {
+  readonly id: string;
+  readonly type: WebSocketMessageType;
+  readonly payload: T;
+  readonly timestamp: number;
+}
+
+// ─────────────────────────────────────────────
+// v2: Universal Power System Types
+// ─────────────────────────────────────────────
+
+/** Energy source for a power system (ki, mana, chakra, mutation, equipment). */
+export interface EnergyReservoir {
+  readonly type: 'internal' | 'external' | 'mutation' | 'equipment';
+  readonly capacity: number | 'infinite';
+  readonly regenerationMethod: string;
+  readonly regenerationRate: number;
+  readonly depletionType: 'stamina' | 'health' | 'life' | 'time' | 'none';
+}
+
+/** How raw energy becomes specific effects (nature typing, nen categories, bending types). */
+export interface ConversionLayer {
+  readonly system: string;
+  readonly types: readonly string[];
+  readonly userAffinity: readonly string[];
+  readonly strengthWeakness: Record<string, { readonly strong: readonly string[]; readonly weak: readonly string[] }>;
+}
+
+/** How the user manifests power (gesture, incantation, willpower, item). */
+export interface ExpressionMechanism {
+  readonly activationMethod: string;
+  readonly range: 'touch' | 'melee' | 'ranged' | 'area' | 'global' | 'self';
+  readonly manifestationType: string;
+  readonly visualSignature: string;
+  readonly soundSignature: string;
+}
+
+/** What prevents infinite power (costs, cooldowns, conditions, weaknesses). */
+export interface LimitationSystem {
+  readonly resourceCost: number;
+  readonly cooldown: number;
+  readonly physicalCost: string;
+  readonly conditions: readonly string[];
+  readonly weaknesses: readonly string[];
+  readonly counterMechanisms: readonly string[];
+}
+
+/** A single stage in a power progression chain (e.g., SSJ1, SSJ2, Bankai). */
+export interface ProgressionStage {
+  readonly name: string;
+  readonly multiplier: number;
+  readonly trigger: string;
+  readonly newAbilities: readonly string[];
+  readonly visualChange: string;
+}
+
+/**
+ * Universal power system that decomposes ANY fictional power (ki, chakra, nen,
+ * quirks, devil fruits, stands, bending) into atomic components.
+ */
+export interface PowerSystem {
+  readonly name: string;
+  readonly universe: string;
+  readonly reservoir: EnergyReservoir;
+  readonly conversionLayer: ConversionLayer;
+  readonly expression: ExpressionMechanism;
+  readonly limitations: LimitationSystem;
+  readonly progression: {
+    readonly type: 'linear' | 'staged' | 'awakening' | 'mastery' | 'transcendence';
+    readonly stages: readonly ProgressionStage[];
+  };
+}
+
+// ─────────────────────────────────────────────
+// v2: Transformation System Types
+// ─────────────────────────────────────────────
+
+/** A single phase in a transformation's visual progression. */
+export interface TransformationPhase {
+  readonly duration: number;
+  readonly description: string;
+  readonly particleEffects: readonly string[];
+  readonly colorShift: { readonly from: string; readonly to: string };
+  readonly morphologyChange: string;
+}
+
+/** Link in a power-up chain (SSJ1→SSJ2, Shikai→Bankai). */
+export interface TransformationChain {
+  readonly previous: string | null;
+  readonly next: string | null;
+  readonly requiresPreviousMastery: boolean;
+}
+
+/** Full transformation definition (power-ups, mode switches, awakenings, fusions). */
+export interface Transformation {
+  readonly name: string;
+  readonly triggerType: 'training' | 'emotion' | 'item' | 'fusion' | 'awakening' | 'ritual';
+  readonly triggerCondition: {
+    readonly requirement: string;
+    readonly emotionalState?: string;
+    readonly itemRequired?: string;
+    readonly fusionPartner?: string;
+    readonly cooldown: number;
+  };
+  readonly visualProgression: {
+    readonly phases: readonly TransformationPhase[];
+    readonly cinematicCamera: boolean;
+    readonly screenEffects: readonly string[];
+    readonly soundDesign: string;
+  };
+  readonly powerModifier: {
+    readonly multiplier: number;
+    readonly newAbilities: readonly string[];
+    readonly enhancedAbilities: readonly string[];
+    readonly statChanges: Record<string, number>;
+  };
+  readonly costs: {
+    readonly activationCost: string;
+    readonly maintenanceCost: string;
+    readonly maxDuration: number | 'unlimited';
+    readonly sideEffects: readonly string[];
+    readonly revertPenalty: string;
+  };
+  readonly chain?: TransformationChain;
+}
+
+// ─────────────────────────────────────────────
+// v2: Animation & VFX Types
+// ─────────────────────────────────────────────
+
+/** A single layer in the VFX rendering stack (bottom to top). */
+export interface VFXLayer {
+  readonly id: string;
+  readonly type: 'environment' | 'aura' | 'particle' | 'ability' | 'screen' | 'cinematic';
+  readonly enabled: boolean;
+  readonly opacity: number;
+  readonly particleCount?: number;
+}
+
+/** Camera behavior directive for cinematic moments. */
+export interface CameraDirective {
+  readonly type: 'fixed' | 'follow' | 'orbit' | 'zoom' | 'cinematic';
+  readonly position?: { readonly x: number; readonly y: number; readonly z: number };
+  readonly target?: { readonly x: number; readonly y: number; readonly z: number };
+  readonly fieldOfView?: number;
+  readonly duration?: number;
+}
+
+/** Sound design profile for an entity. */
+export interface SoundDesign {
+  readonly voice?: {
+    readonly pitch: number;
+    readonly tone: string;
+    readonly effects: readonly string[];
+    readonly leitmotif?: string;
+  };
+  readonly abilities?: Record<string, { readonly soundEffect: string }>;
+}
+
+// ─────────────────────────────────────────────
+// v2: 12-Dimension Character Types
+// ─────────────────────────────────────────────
+
+/** Dimension 1: Identity — who the entity IS. */
+export interface CharacterIdentity {
+  readonly name: string;
+  readonly aliases: readonly string[];
+  readonly universe: string;
+  readonly role: 'protagonist' | 'antagonist' | 'mentor' | 'rival' | 'support' | 'comic relief' | 'mysterious';
+  readonly age: { readonly actual: number; readonly visual: number };
+}
+
+/** Dimension 2: Morphology — physical form. */
+export interface CharacterMorphology {
+  readonly species: string;
+  readonly bodyType: 'ectomorph' | 'mesomorph' | 'endomorph' | 'stylized';
+  readonly proportions: { readonly headToBody: number; readonly limbRatios: readonly number[] };
+  readonly height: number;
+  readonly distinguishingFeatures: readonly string[];
+  readonly bodyStructure: string;
+}
+
+/** Dimension 3: Appearance — visual design. */
+export interface CharacterAppearance {
+  readonly colorPalette: { readonly primary: string; readonly secondary: string; readonly accent: string };
+  readonly hair: { readonly color: string; readonly style: string; readonly length: number; readonly physics: string };
+  readonly eyes: { readonly shape: string; readonly color: string; readonly glow?: string; readonly special?: string };
+  readonly clothing: readonly string[];
+  readonly armor?: { readonly tier: string; readonly style: string };
+  readonly weapons?: readonly string[];
+  readonly silhouetteSignature: string;
+}
+
+/** Dimension 4: Personality — behavioral core. */
+export interface CharacterPersonality {
+  readonly bigFive: {
+    readonly openness: number;
+    readonly conscientiousness: number;
+    readonly extraversion: number;
+    readonly agreeableness: number;
+    readonly neuroticism: number;
+  };
+  readonly traits: readonly string[];
+  readonly archetypeRole: string;
+  readonly emotionalProcessing: string;
+  readonly speechPattern: {
+    readonly formality: number;
+    readonly vocabulary: string;
+    readonly catchphrases: readonly string[];
+  };
+  readonly humorStyle: string;
+  readonly mannerisms: readonly string[];
+}
+
+/** Dimension 5: Relationship with another entity. */
+export interface CharacterRelationship {
+  readonly targetId: string;
+  readonly type: 'rival' | 'mentor' | 'love' | 'nemesis' | 'ally' | 'family';
+  readonly behavioralInfluence: string;
+  readonly designResonance: 'contrasting' | 'complementary';
+}
+
+/** Dimension 6: Backstory and lore. */
+export interface CharacterLore {
+  readonly origin: { readonly birthplace: string; readonly socialClass: string; readonly childhoodEvents: readonly string[] };
+  readonly traumas: readonly { readonly event: string; readonly manifestation: string; readonly recoveryStatus: string }[];
+  readonly motivations: { readonly surface: string; readonly coreNeed: string; readonly originalWound: string };
+}
+
+/**
+ * Complete 12-dimension character decomposition.
+ * Every entity — from Goku to a Looney Tunes cat — decomposes into these dimensions.
+ */
+export interface CharacterDimension {
+  readonly identity: CharacterIdentity;
+  readonly morphology: CharacterMorphology;
+  readonly appearance: CharacterAppearance;
+  readonly personality: CharacterPersonality;
+  readonly relationships: readonly CharacterRelationship[];
+  readonly lore: CharacterLore;
+  readonly powerSystem: PowerSystem;
+  readonly visualStyle: { readonly category: string; readonly substyle: string; readonly frameRate: number };
+  readonly sound: SoundDesign;
+  readonly movement: { readonly personality: string; readonly walkCycle: string; readonly combatMovement: string };
+  readonly animationComplexity: { readonly baseFrameRate: number; readonly techniques: readonly string[] };
+  readonly evolutionPotential: { readonly strategy: string; readonly mutationSensitivity: number };
+}
+
+// ─────────────────────────────────────────────
+// v2: Concept Graph Types (for Compiler)
+// ─────────────────────────────────────────────
+
+/** A node in the concept graph — represents one parsed concept from input. */
+export interface ConceptNode {
+  readonly id: string;
+  readonly value: string;
+  readonly taxonomy: string;
+  readonly confidence: number;
+  readonly relationships: readonly { readonly target: string; readonly type: string; readonly weight: number }[];
+}
+
+/**
+ * Structured concept graph produced by the semantic parser.
+ * Bridges natural language input to seed compilation.
+ */
+export interface ConceptGraphV2 {
+  readonly nodes: readonly ConceptNode[];
+  readonly identity: Partial<CharacterIdentity>;
+  readonly morphology: Partial<CharacterMorphology>;
+  readonly appearance: Partial<CharacterAppearance>;
+  readonly personality: Partial<CharacterPersonality>;
+  readonly powerSystem: Partial<PowerSystem>;
+  readonly transformations: readonly Transformation[];
+}
+
+/** Blueprint produced by the 12-dimension compiler. */
+export interface EntityBlueprintV2 {
+  readonly conceptGraph: ConceptGraphV2;
+  readonly seed: UniversalSeed;
+  readonly dimensions: Partial<CharacterDimension>;
+  readonly validationStatus: 'pending' | 'valid' | 'invalid';
+  readonly validationErrors: readonly string[];
+}
+
+// ─────────────────────────────────────────────
+// v2: Ontology Node Types
+// ─────────────────────────────────────────────
+
+/** A node in any taxonomy tree (species, archetype, element, style, ability, material). */
+export interface TaxonomyNode<TDefaults = Record<string, unknown>> {
+  readonly id: string;
+  readonly name: string;
+  readonly parent: string | null;
+  readonly children: readonly string[];
+  readonly keywords: readonly string[];
+  readonly defaults: TDefaults;
+}
+
+/** Species-specific defaults carried by each species node. */
+export interface SpeciesDefaults {
+  readonly bodyStructure: BodyStructure;
+  readonly defaultProportions: Record<string, number>;
+  readonly defaultAnimations: readonly string[];
+  readonly compatibleElements: readonly string[];
+  readonly materialComposition: readonly string[];
+}
+
+/** Archetype-specific defaults. */
+export interface ArchetypeDefaults {
+  readonly personalityBias: Partial<PersonalityVector>;
+  readonly abilityAffinities: readonly string[];
+  readonly equipmentPreferences: readonly string[];
+  readonly behavioralPatterns: readonly string[];
+  readonly visualDesignLanguage: string;
+}
+
+/** Element-specific defaults. */
+export interface ElementDefaults {
+  readonly colorAssociation: readonly string[];
+  readonly visualEffects: readonly string[];
+  readonly weakness: readonly string[];
+  readonly strongAgainst: readonly string[];
+  readonly materialInteractions: readonly string[];
+}
+
+/** Style-specific defaults (deep — includes substyle parameters). */
+export interface StyleDefaults {
+  readonly proportionRules: Record<string, number>;
+  readonly shadingMethod: string;
+  readonly lineQuality: { readonly thickness: number; readonly smoothness: number };
+  readonly detailLevel: number;
+  readonly colorLogic: string;
+  readonly animationFrameRate: number;
+  readonly exaggerationScale: number;
+  readonly studioReference?: string;
+}
+
+/** Material-specific defaults. */
+export interface MaterialDefaults {
+  readonly rigidity: number;
+  readonly elasticity: number;
+  readonly glow: number;
+  readonly energyDensity: number;
+  readonly decayRate: number;
+  readonly shaderHints: Record<string, number>;
+  readonly soundProperties: string;
+}

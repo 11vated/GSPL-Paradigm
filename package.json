@@ -15,7 +15,12 @@
     "dev:desktop": "pnpm --filter @paradigm/desktop dev",
     "dev:tui": "pnpm --filter @paradigm/tui dev",
     "dev:cli": "pnpm --filter @paradigm/cli dev",
-    "dev:studio": "pnpm --filter @paradigm/studio dev"
+    "dev:studio": "pnpm --filter @paradigm/studio dev",
+    "dev:ui": "pnpm --filter @paradigm/ui dev",
+    "dev:api": "pnpm --filter @paradigm/web dev"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",

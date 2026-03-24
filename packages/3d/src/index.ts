@@ -789,6 +789,125 @@ export class SkeletonGenerator {
 
     return { name: `skeleton_${seed.$name}`, bones: scaledBones };
   }
+
+  /** Generate a winged skeleton (humanoid base + wing bones). */
+  generateWinged(): Skeleton {
+    const humanoid = this.generateHumanoid();
+    const chestIndex = humanoid.bones.findIndex((b) => b.name === 'chest');
+    const ci = chestIndex >= 0 ? chestIndex : 2;
+
+    const wingBones: Bone[] = [
+      { name: 'wing_root.L',  position: new Vec3(-0.12, 0.15, 0.08), rotation: Vec3.zero(), parentIndex: ci },
+      { name: 'wing_mid.L',   position: new Vec3(-0.30, 0.10, 0.15), rotation: Vec3.zero(), parentIndex: humanoid.bones.length },
+      { name: 'wing_tip.L',   position: new Vec3(-0.35, 0.05, 0.20), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 1 },
+      { name: 'wing_root.R',  position: new Vec3( 0.12, 0.15, 0.08), rotation: Vec3.zero(), parentIndex: ci },
+      { name: 'wing_mid.R',   position: new Vec3( 0.30, 0.10, 0.15), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 3 },
+      { name: 'wing_tip.R',   position: new Vec3( 0.35, 0.05, 0.20), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 4 },
+      // Tail
+      { name: 'tail_base',    position: new Vec3(0, -0.05, 0.10), rotation: Vec3.zero(), parentIndex: 0 },
+      { name: 'tail_mid',     position: new Vec3(0, -0.02, 0.20), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 6 },
+      { name: 'tail_tip',     position: new Vec3(0,  0.00, 0.25), rotation: Vec3.zero(), parentIndex: humanoid.bones.length + 7 },
+    ];
+
+    return { name: 'winged', bones: [...humanoid.bones, ...wingBones] };
+  }
+
+  /** Generate a serpentine skeleton (spine chain with no limbs). */
+  generateSerpentine(): Skeleton {
+    const segmentCount = 10;
+    const bones: Bone[] = [
+      { name: 'root', position: new Vec3(0, 0, 0), rotation: Vec3.zero(), parentIndex: -1 },
+    ];
+    for (let i = 0; i < segmentCount; i++) {
+      bones.push({
+        name: `spine_${i}`,
+        position: new Vec3(0, 0, -0.15),
+        rotation: Vec3.zero(),
+        parentIndex: i,
+      });
+    }
+    // Head at the end
+    bones.push({
+      name: 'head',
+      position: new Vec3(0, 0.05, -0.12),
+      rotation: Vec3.zero(),
+      parentIndex: segmentCount,
+    });
+    return { name: 'serpentine', bones };
+  }
+
+  /** Generate skeleton from BodyStructure type. */
+  generateFromBodyStructure(body: string): Skeleton {
+    switch (body) {
+      case 'humanoid': return this.generateHumanoid();
+      case 'quadruped': return this.generateQuadruped();
+      case 'winged': return this.generateWinged();
+      case 'serpentine': return this.generateSerpentine();
+      case 'mechanical': return this.generateHumanoid(); // mechanical uses humanoid base
+      case 'multi_limbed': return this.generateHumanoid(); // start with humanoid, extend later
+      case 'floating': return this.generateHumanoid(); // ghostly humanoid
+      case 'amorphous': {
+        // Minimal skeleton: root + 4 control points
+        return {
+          name: 'amorphous',
+          bones: [
+            { name: 'root', position: new Vec3(0, 0, 0), rotation: Vec3.zero(), parentIndex: -1 },
+            { name: 'top',  position: new Vec3(0, 0.3, 0), rotation: Vec3.zero(), parentIndex: 0 },
+            { name: 'left', position: new Vec3(-0.2, 0, 0), rotation: Vec3.zero(), parentIndex: 0 },
+            { name: 'right',position: new Vec3(0.2, 0, 0), rotation: Vec3.zero(), parentIndex: 0 },
+            { name: 'front',position: new Vec3(0, 0, -0.2), rotation: Vec3.zero(), parentIndex: 0 },
+          ],
+        };
+      }
+      default: return this.generateHumanoid();
+    }
+  }
+}
+
+/**
+ * Apply morphology proportions to a skeleton by scaling bone positions.
+ * Head bones scale by headToBodyRatio, limb bones by limbToBodyRatio,
+ * shoulder bones by shoulderToHipRatio. Exaggeration amplifies deviations.
+ */
+export function applyMorphologyToSkeleton(
+  skeleton: Skeleton,
+  proportions: { headToBodyRatio: number; limbToBodyRatio: number; shoulderToHipRatio: number },
+  exaggeration: number,
+): Skeleton {
+  const headScale = 0.5 + proportions.headToBodyRatio * 2.0; // maps 0.13-0.55 → 0.76-1.6
+  const limbScale = 0.5 + proportions.limbToBodyRatio;         // maps 0.3-0.75 → 0.8-1.25
+  const shoulderScale = proportions.shoulderToHipRatio;
+
+  const headBones = new Set(['head', 'neck']);
+  const limbBones = new Set([
+    'upper_arm.L', 'forearm.L', 'hand.L', 'upper_arm.R', 'forearm.R', 'hand.R',
+    'thigh.L', 'shin.L', 'foot.L', 'thigh.R', 'shin.R', 'foot.R',
+    'upper_leg.L', 'lower_leg.L', 'upper_leg.R', 'lower_leg.R',
+  ]);
+  const shoulderBones = new Set(['shoulder.L', 'shoulder.R']);
+
+  const scaledBones: Bone[] = skeleton.bones.map((bone) => {
+    let sx = 1.0;
+    let sy = 1.0;
+
+    if (headBones.has(bone.name)) {
+      const factor = 1.0 + (headScale - 1.0) * exaggeration;
+      sx = factor;
+      sy = factor;
+    } else if (limbBones.has(bone.name)) {
+      const factor = 1.0 + (limbScale - 1.0) * exaggeration;
+      sy = factor;
+    } else if (shoulderBones.has(bone.name)) {
+      sx = 1.0 + (shoulderScale - 1.0) * exaggeration;
+    }
+
+    return {
+      ...bone,
+      position: new Vec3(bone.position.x * sx, bone.position.y * sy, bone.position.z),
+    };
+  });
+
+  return { name: skeleton.name, bones: scaledBones };
 }
 
 // ─────────────────────────────────────────────
@@ -1254,4 +1373,491 @@ export class SceneEngine {
   exportGLTF(scene: SceneGraph): string {
     return this.exporter.export(scene);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// v2: ANIMATION ENGINE — Disney Principles + Anime + Cartoon Physics
+// ═══════════════════════════════════════════════════════════════════
+
+/** A single keyframe in an animation track. */
+export interface AnimKeyframe {
+  readonly time: number;
+  readonly value: number;
+  readonly easing: 'linear' | 'ease_in' | 'ease_out' | 'ease_in_out' | 'bounce' | 'elastic';
+}
+
+/** An animation track controls a single property over time. */
+export interface AnimTrack {
+  readonly property: string;
+  readonly keyframes: readonly AnimKeyframe[];
+}
+
+/** A complete animation clip with named tracks. */
+export interface AnimClip {
+  readonly name: string;
+  readonly duration: number;
+  readonly loop: boolean;
+  readonly tracks: readonly AnimTrack[];
+  readonly techniques: readonly string[];
+}
+
+/** Disney's 12 Principles with style-specific scaling. */
+export interface DisneyPrinciples {
+  readonly squashStretch: number;
+  readonly anticipation: number;
+  readonly staging: number;
+  readonly followThrough: number;
+  readonly easeInOut: number;
+  readonly arcs: number;
+  readonly secondaryAction: number;
+  readonly timing: number;
+  readonly exaggeration: number;
+  readonly solidDrawing: number;
+  readonly appeal: number;
+}
+
+/** Style-specific Disney principle presets. */
+export function getDisneyPreset(style: string): DisneyPrinciples {
+  switch (style) {
+    case 'chibi':
+      return { squashStretch: 2.0, anticipation: 1.5, staging: 1.0, followThrough: 1.5, easeInOut: 1.3, arcs: 1.2, secondaryAction: 1.5, timing: 1.3, exaggeration: 2.0, solidDrawing: 0.7, appeal: 1.5 };
+    case 'shonen':
+      return { squashStretch: 1.5, anticipation: 1.8, staging: 1.5, followThrough: 1.3, easeInOut: 1.2, arcs: 1.0, secondaryAction: 1.2, timing: 1.5, exaggeration: 1.5, solidDrawing: 1.0, appeal: 1.3 };
+    case 'ufotable':
+      return { squashStretch: 1.3, anticipation: 1.5, staging: 1.8, followThrough: 1.5, easeInOut: 1.5, arcs: 1.3, secondaryAction: 1.5, timing: 1.3, exaggeration: 1.3, solidDrawing: 1.2, appeal: 1.5 };
+    case 'ghibli':
+      return { squashStretch: 1.1, anticipation: 1.0, staging: 1.5, followThrough: 1.8, easeInOut: 1.5, arcs: 1.5, secondaryAction: 1.8, timing: 1.0, exaggeration: 1.1, solidDrawing: 1.3, appeal: 1.8 };
+    case 'trigger':
+      return { squashStretch: 1.8, anticipation: 2.0, staging: 1.5, followThrough: 1.0, easeInOut: 0.8, arcs: 0.8, secondaryAction: 1.0, timing: 2.0, exaggeration: 1.8, solidDrawing: 0.8, appeal: 1.5 };
+    case 'looney_tunes':
+    case 'cartoon':
+      return { squashStretch: 2.0, anticipation: 2.0, staging: 1.3, followThrough: 2.0, easeInOut: 1.5, arcs: 1.3, secondaryAction: 2.0, timing: 1.5, exaggeration: 2.0, solidDrawing: 0.5, appeal: 1.8 };
+    case 'realistic':
+    case 'film_vfx':
+      return { squashStretch: 1.05, anticipation: 1.0, staging: 1.0, followThrough: 1.0, easeInOut: 1.0, arcs: 1.0, secondaryAction: 1.0, timing: 1.0, exaggeration: 1.05, solidDrawing: 1.0, appeal: 1.0 };
+    case 'pixel':
+      return { squashStretch: 1.0, anticipation: 0.8, staging: 1.0, followThrough: 0.5, easeInOut: 0.5, arcs: 0.5, secondaryAction: 0.5, timing: 0.8, exaggeration: 1.0, solidDrawing: 0.5, appeal: 1.0 };
+    default:
+      return { squashStretch: 1.2, anticipation: 1.2, staging: 1.0, followThrough: 1.0, easeInOut: 1.0, arcs: 1.0, secondaryAction: 1.0, timing: 1.0, exaggeration: 1.2, solidDrawing: 1.0, appeal: 1.0 };
+  }
+}
+
+/** Anime-specific animation techniques. */
+export interface AnimeTechniques {
+  readonly speedLines: boolean;
+  readonly impactFrames: boolean;
+  readonly smearFrames: boolean;
+  readonly sakugaBursts: boolean;
+  readonly limitedAnimation: boolean;
+  readonly powerUpSequence: boolean;
+  readonly screenFlash: boolean;
+  readonly backgroundBlur: boolean;
+}
+
+export function getAnimeTechniques(style: string): AnimeTechniques {
+  const base = { speedLines: false, impactFrames: false, smearFrames: false, sakugaBursts: false, limitedAnimation: false, powerUpSequence: false, screenFlash: false, backgroundBlur: false };
+  switch (style) {
+    case 'shonen':
+      return { ...base, speedLines: true, impactFrames: true, smearFrames: true, sakugaBursts: true, powerUpSequence: true, screenFlash: true, backgroundBlur: true };
+    case 'ufotable':
+      return { ...base, speedLines: true, impactFrames: true, smearFrames: true, sakugaBursts: true, powerUpSequence: true, screenFlash: true, backgroundBlur: true };
+    case 'trigger':
+      return { ...base, speedLines: true, impactFrames: true, smearFrames: true, sakugaBursts: true, screenFlash: true };
+    case 'seinen':
+      return { ...base, impactFrames: true, limitedAnimation: true };
+    case 'ghibli':
+      return { ...base }; // Ghibli relies on fluid drawing, not anime shortcuts
+    case 'kyoani':
+      return { ...base, limitedAnimation: true }; // Subtle, not flashy
+    default:
+      return base;
+  }
+}
+
+/** Cartoon physics rules. */
+export interface CartoonPhysics {
+  readonly gravityDelay: boolean;
+  readonly hammerspace: boolean;
+  readonly toonForceScaling: boolean;
+  readonly elasticRecovery: boolean;
+  readonly bodyPartIndependence: boolean;
+  readonly delayedReaction: boolean;
+}
+
+export function getCartoonPhysics(style: string): CartoonPhysics {
+  const none = { gravityDelay: false, hammerspace: false, toonForceScaling: false, elasticRecovery: false, bodyPartIndependence: false, delayedReaction: false };
+  if (['looney_tunes', 'cartoon', 'cn_flat'].includes(style)) {
+    return { gravityDelay: true, hammerspace: true, toonForceScaling: true, elasticRecovery: true, bodyPartIndependence: true, delayedReaction: true };
+  }
+  if (['chibi', 'disney_2d'].includes(style)) {
+    return { ...none, elasticRecovery: true, toonForceScaling: true };
+  }
+  return none;
+}
+
+/** VFX layer configuration for an entity. */
+export interface VFXStack {
+  readonly environmentReaction: boolean;
+  readonly aura: { readonly enabled: boolean; readonly color: string; readonly intensity: number };
+  readonly particles: { readonly enabled: boolean; readonly type: string; readonly count: number };
+  readonly abilityVisuals: boolean;
+  readonly screenEffects: readonly string[];
+  readonly cinematicCamera: boolean;
+}
+
+export function buildVFXStack(element: string, style: string, hasTransforms: boolean): VFXStack {
+  const particleTypes: Record<string, string> = {
+    fire: 'ember', ice: 'snowflake', lightning: 'spark', nature: 'leaf',
+    water: 'bubble', dark: 'shadow_wisp', light: 'light_mote', cosmic: 'star',
+    poison: 'miasma', wind: 'dust', earth: 'pebble',
+  };
+
+  const auraColors: Record<string, string> = {
+    fire: '#FF4400', ice: '#88CCFF', lightning: '#FFFF00', nature: '#22AA22',
+    water: '#0066CC', dark: '#440066', light: '#FFD700', cosmic: '#AA00FF',
+    poison: '#44FF00', wind: '#CCDDFF', earth: '#886633',
+  };
+
+  return {
+    environmentReaction: !['pixel', 'minimal'].includes(style),
+    aura: {
+      enabled: element !== 'none',
+      color: auraColors[element] ?? '#FFFFFF',
+      intensity: hasTransforms ? 0.8 : 0.4,
+    },
+    particles: {
+      enabled: element !== 'none',
+      type: particleTypes[element] ?? 'generic',
+      count: style === 'realistic' ? 200 : style === 'pixel' ? 10 : 50,
+    },
+    abilityVisuals: true,
+    screenEffects: hasTransforms ? ['screen_shake', 'flash_white', 'radial_blur'] : [],
+    cinematicCamera: hasTransforms,
+  };
+}
+
+/** FABRIK IK solver — Forward And Backward Reaching Inverse Kinematics. */
+export class FABRIKSolver {
+  private readonly tolerance: number;
+  private readonly maxIterations: number;
+
+  constructor(tolerance: number = 0.001, maxIterations: number = 10) {
+    this.tolerance = tolerance;
+    this.maxIterations = maxIterations;
+  }
+
+  /** Solve IK for a chain of joint positions to reach a target. */
+  solve(joints: Vec3[], target: Vec3): Vec3[] {
+    const n = joints.length;
+    if (n < 2) return joints;
+
+    const result = joints.map(j => new Vec3(j.x, j.y, j.z));
+    const lengths: number[] = [];
+    for (let i = 0; i < n - 1; i++) {
+      lengths.push(result[i]!.sub(result[i + 1]!).length());
+    }
+
+    const origin = new Vec3(result[0]!.x, result[0]!.y, result[0]!.z);
+    const totalLength = lengths.reduce((a, b) => a + b, 0);
+    const distToTarget = origin.sub(target).length();
+
+    // If target is unreachable, stretch toward it
+    if (distToTarget > totalLength) {
+      for (let i = 0; i < n - 1; i++) {
+        const dir = target.sub(result[i]!).normalize();
+        result[i + 1] = result[i]!.add(dir.scale(lengths[i]!));
+      }
+      return result;
+    }
+
+    for (let iter = 0; iter < this.maxIterations; iter++) {
+      // Check convergence
+      if (result[n - 1]!.sub(target).length() < this.tolerance) break;
+
+      // Forward pass: end effector to target
+      result[n - 1] = target;
+      for (let i = n - 2; i >= 0; i--) {
+        const dir = result[i]!.sub(result[i + 1]!).normalize();
+        result[i] = result[i + 1]!.add(dir.scale(lengths[i]!));
+      }
+
+      // Backward pass: root to origin
+      result[0] = origin;
+      for (let i = 0; i < n - 1; i++) {
+        const dir = result[i + 1]!.sub(result[i]!).normalize();
+        result[i + 1] = result[i]!.add(dir.scale(lengths[i]!));
+      }
+    }
+
+    return result;
+  }
+}
+
+/** Animation state machine — manages transitions between animation clips. */
+export interface AnimState {
+  readonly name: string;
+  readonly clip: string;
+  readonly transitions: readonly AnimTransition[];
+}
+
+export interface AnimTransition {
+  readonly target: string;
+  readonly condition: string;
+  readonly blendDuration: number;
+}
+
+export class AnimationStateMachine {
+  private readonly states: Map<string, AnimState> = new Map();
+  private currentState: string;
+
+  constructor(initialState: string) {
+    this.currentState = initialState;
+  }
+
+  addState(state: AnimState): void {
+    this.states.set(state.name, state);
+  }
+
+  getCurrentState(): string {
+    return this.currentState;
+  }
+
+  getCurrentClip(): string | undefined {
+    return this.states.get(this.currentState)?.clip;
+  }
+
+  /** Attempt a transition based on a triggered condition. Returns true if transitioned. */
+  trigger(condition: string): boolean {
+    const state = this.states.get(this.currentState);
+    if (!state) return false;
+
+    const transition = state.transitions.find(t => t.condition === condition);
+    if (!transition) return false;
+    if (!this.states.has(transition.target)) return false;
+
+    this.currentState = transition.target;
+    return true;
+  }
+
+  /** Get available transitions from current state. */
+  availableTransitions(): readonly AnimTransition[] {
+    return this.states.get(this.currentState)?.transitions ?? [];
+  }
+}
+
+/** Build a standard entity animation state machine from archetype + body structure. */
+export function buildEntityStateMachine(archetype: string, bodyStructure: string): AnimationStateMachine {
+  const sm = new AnimationStateMachine('idle');
+
+  const canFly = bodyStructure === 'winged' || bodyStructure === 'floating';
+  const isQuadruped = bodyStructure === 'quadruped' || bodyStructure === 'serpentine';
+  const isCombat = ['warrior', 'mage', 'archer', 'rogue', 'knight', 'berserker', 'paladin', 'monk', 'dragon_archetype'].includes(archetype);
+
+  sm.addState({
+    name: 'idle',
+    clip: 'idle',
+    transitions: [
+      { target: 'walk', condition: 'move', blendDuration: 0.2 },
+      ...(isCombat ? [{ target: 'attack', condition: 'attack', blendDuration: 0.1 }] : []),
+      ...(canFly ? [{ target: 'fly', condition: 'fly', blendDuration: 0.3 }] : []),
+      { target: 'hurt', condition: 'damage', blendDuration: 0.05 },
+    ],
+  });
+
+  sm.addState({
+    name: 'walk',
+    clip: isQuadruped ? 'walk_quad' : 'walk',
+    transitions: [
+      { target: 'idle', condition: 'stop', blendDuration: 0.2 },
+      { target: 'run', condition: 'sprint', blendDuration: 0.15 },
+      ...(isCombat ? [{ target: 'attack', condition: 'attack', blendDuration: 0.1 }] : []),
+      { target: 'hurt', condition: 'damage', blendDuration: 0.05 },
+    ],
+  });
+
+  sm.addState({
+    name: 'run',
+    clip: isQuadruped ? 'run_quad' : 'run',
+    transitions: [
+      { target: 'walk', condition: 'slow', blendDuration: 0.2 },
+      { target: 'idle', condition: 'stop', blendDuration: 0.3 },
+      ...(isCombat ? [{ target: 'attack', condition: 'attack', blendDuration: 0.1 }] : []),
+      { target: 'hurt', condition: 'damage', blendDuration: 0.05 },
+    ],
+  });
+
+  if (isCombat) {
+    sm.addState({
+      name: 'attack',
+      clip: archetype === 'mage' ? 'cast' : archetype === 'archer' ? 'shoot' : 'attack',
+      transitions: [
+        { target: 'idle', condition: 'done', blendDuration: 0.2 },
+        { target: 'hurt', condition: 'damage', blendDuration: 0.05 },
+      ],
+    });
+  }
+
+  if (canFly) {
+    sm.addState({
+      name: 'fly',
+      clip: 'fly',
+      transitions: [
+        { target: 'idle', condition: 'land', blendDuration: 0.3 },
+        ...(isCombat ? [{ target: 'attack', condition: 'attack', blendDuration: 0.1 }] : []),
+        { target: 'hurt', condition: 'damage', blendDuration: 0.05 },
+      ],
+    });
+  }
+
+  sm.addState({
+    name: 'hurt',
+    clip: 'hurt',
+    transitions: [
+      { target: 'idle', condition: 'recover', blendDuration: 0.3 },
+      { target: 'death', condition: 'die', blendDuration: 0.1 },
+    ],
+  });
+
+  sm.addState({
+    name: 'death',
+    clip: 'death',
+    transitions: [],
+  });
+
+  return sm;
+}
+
+/**
+ * Procedural walk cycle generator.
+ * Produces keyframe data for a walk cycle based on personality and body structure.
+ */
+export function generateWalkCycle(personality: string, bodyStructure: string, disneyScale: DisneyPrinciples): AnimClip {
+  const duration = personality === 'stealthy' ? 1.5 : personality === 'confident' ? 0.8 : 1.0;
+  const stride = personality === 'stealthy' ? 0.3 : personality === 'confident' ? 0.5 : 0.4;
+  const bounce = 0.02 * disneyScale.squashStretch;
+  const lean = personality === 'confident' ? 0.03 : personality === 'stealthy' ? 0.01 : 0.02;
+
+  const isQuad = bodyStructure === 'quadruped' || bodyStructure === 'serpentine';
+
+  const tracks: AnimTrack[] = [
+    {
+      property: 'position.y',
+      keyframes: [
+        { time: 0, value: 0, easing: 'ease_in_out' },
+        { time: duration * 0.25, value: bounce, easing: 'ease_in_out' },
+        { time: duration * 0.5, value: 0, easing: 'ease_in_out' },
+        { time: duration * 0.75, value: bounce, easing: 'ease_in_out' },
+        { time: duration, value: 0, easing: 'ease_in_out' },
+      ],
+    },
+    {
+      property: 'rotation.z',
+      keyframes: [
+        { time: 0, value: 0, easing: 'ease_in_out' },
+        { time: duration * 0.25, value: lean, easing: 'ease_in_out' },
+        { time: duration * 0.5, value: 0, easing: 'ease_in_out' },
+        { time: duration * 0.75, value: -lean, easing: 'ease_in_out' },
+        { time: duration, value: 0, easing: 'ease_in_out' },
+      ],
+    },
+  ];
+
+  if (!isQuad) {
+    // Bipedal leg swing
+    tracks.push({
+      property: 'leftLeg.rotation.x',
+      keyframes: [
+        { time: 0, value: -stride, easing: 'ease_in_out' },
+        { time: duration * 0.5, value: stride, easing: 'ease_in_out' },
+        { time: duration, value: -stride, easing: 'ease_in_out' },
+      ],
+    });
+    tracks.push({
+      property: 'rightLeg.rotation.x',
+      keyframes: [
+        { time: 0, value: stride, easing: 'ease_in_out' },
+        { time: duration * 0.5, value: -stride, easing: 'ease_in_out' },
+        { time: duration, value: stride, easing: 'ease_in_out' },
+      ],
+    });
+  }
+
+  return {
+    name: 'walk',
+    duration,
+    loop: true,
+    tracks,
+    techniques: ['arcs', 'ease_in_out', 'secondary_action'],
+  };
+}
+
+/** Procedural idle animation generator. */
+export function generateIdleAnim(personality: string, bodyStructure: string, disneyScale: DisneyPrinciples): AnimClip {
+  const duration = 3.0;
+  const breathAmp = 0.015 * disneyScale.secondaryAction;
+  const swayAmp = personality === 'nervous' ? 0.01 : 0.005;
+
+  const tracks: AnimTrack[] = [
+    {
+      property: 'scale.y',
+      keyframes: [
+        { time: 0, value: 1.0, easing: 'ease_in_out' },
+        { time: duration * 0.5, value: 1.0 + breathAmp, easing: 'ease_in_out' },
+        { time: duration, value: 1.0, easing: 'ease_in_out' },
+      ],
+    },
+    {
+      property: 'rotation.y',
+      keyframes: [
+        { time: 0, value: 0, easing: 'ease_in_out' },
+        { time: duration * 0.3, value: swayAmp, easing: 'ease_in_out' },
+        { time: duration * 0.7, value: -swayAmp, easing: 'ease_in_out' },
+        { time: duration, value: 0, easing: 'ease_in_out' },
+      ],
+    },
+  ];
+
+  return {
+    name: 'idle',
+    duration,
+    loop: true,
+    tracks,
+    techniques: ['secondary_action', 'breathing'],
+  };
+}
+
+/**
+ * Complete animation profile for an entity.
+ * Combines Disney principles, anime techniques, cartoon physics, VFX, and state machine.
+ */
+export interface EntityAnimProfile {
+  readonly disneyPrinciples: DisneyPrinciples;
+  readonly animeTechniques: AnimeTechniques;
+  readonly cartoonPhysics: CartoonPhysics;
+  readonly vfxStack: VFXStack;
+  readonly stateMachine: AnimationStateMachine;
+  readonly clips: readonly AnimClip[];
+}
+
+/** Build complete animation profile from concept data. */
+export function buildEntityAnimProfile(
+  archetype: string,
+  bodyStructure: string,
+  style: string,
+  element: string,
+  hasTransforms: boolean,
+  personality: string,
+): EntityAnimProfile {
+  const disney = getDisneyPreset(style);
+  const anime = getAnimeTechniques(style);
+  const physics = getCartoonPhysics(style);
+  const vfx = buildVFXStack(element, style, hasTransforms);
+  const sm = buildEntityStateMachine(archetype, bodyStructure);
+
+  const clips: AnimClip[] = [
+    generateIdleAnim(personality, bodyStructure, disney),
+    generateWalkCycle(personality, bodyStructure, disney),
+  ];
+
+  return { disneyPrinciples: disney, animeTechniques: anime, cartoonPhysics: physics, vfxStack: vfx, stateMachine: sm, clips };
 }

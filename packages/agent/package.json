@@ -4,7 +4,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -12,11 +17,17 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@paradigm/types": "workspace:*",
-    "@paradigm/rng": "workspace:*",
-    "@paradigm/llm": "workspace:*",
     "@paradigm/awareness": "workspace:*",
-    "@paradigm/knowledge": "workspace:*"
+    "@paradigm/concept": "workspace:*",
+    "@paradigm/ontology": "workspace:*",
+    "@paradigm/events": "workspace:*",
+    "@paradigm/evolution": "workspace:*",
+    "@paradigm/forge": "workspace:*",
+    "@paradigm/knowledge": "workspace:*",
+    "@paradigm/llm": "workspace:*",
+    "@paradigm/rng": "workspace:*",
+    "@paradigm/seed": "workspace:*",
+    "@paradigm/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

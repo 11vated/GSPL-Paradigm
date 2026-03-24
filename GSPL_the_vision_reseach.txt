@@ -1,0 +1,14 @@
+Honest take — having gone through the entire codebase during the audit:
+You don't need to torch everything, but you should start clean on the architecture.
+Here's why. Your current repo has real value in a few specific places: the types package is solid (776 lines of well-thought-out seed genetics, gene types, domain enums), the monorepo scaffolding with pnpm/turbo works, and the core pipeline logic in seed, rng, and events is sound. Those aren't throwaway.
+But the problems are structural. 30 of your 49 packages are disconnected islands — they compile but nothing imports them. The concept system is a keyword map ported from Python that has no relationship to the native intelligence engine you've designed. The llm package exists but your direction is explicitly anti-LLM-dependency. There's scaffolding for features that don't align with where you're going (marketplace stubs, agent tooling for an AI approach you've moved past).
+Trying to refactor 49 packages down to 19 while simultaneously rebuilding the intelligence engine, adding SDF rendering, and redesigning the compiler pipeline would mean constantly fighting legacy decisions. You'd spend more time untangling than building.
+What I'd actually recommend is a clean 19-package monorepo that carries forward three things from the current repo:
+
+The type definitions — your seed schema, gene types, and domain model are mature and carry over directly
+The foundational algorithms — rng (Mulberry32 PRNG), core event system patterns, seed validation logic
+The research — research.txt and both architecture documents are your real intellectual capital
+
+Everything else gets a fresh start built to the master plan spec from day one. No ported Python logic, no orphan packages, no LLM scaffolding, no premature marketplace stubs.
+The monorepo config (pnpm workspace, turbo pipeline, tsconfig hierarchy, vitest setup) can be recreated in an hour. That's not where your time was invested — the thinking was, and that's all captured in the plan.
+

@@ -48,6 +48,21 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
+// SSE clients for real-time event streaming
+const sseClients = new Set<http.ServerResponse>();
+
+// Subscribe to all EventBus events and broadcast to SSE clients
+engine.eventBus.onAny((event: unknown) => {
+  const data = `data: ${JSON.stringify(event)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(data);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+});
+
 const server = http.createServer(async (httpReq, httpRes) => {
   const cors = parseCorsHeaders(httpReq.headers['origin']);
   for (const [k, v] of Object.entries(cors)) {
@@ -64,6 +79,22 @@ const server = http.createServer(async (httpReq, httpRes) => {
   const rawUrl = httpReq.url ?? '/';
   const path = rawUrl.split('?')[0] ?? '/';
   const query = parseQuery(rawUrl);
+
+  // SSE endpoint for real-time events
+  if (path === '/api/events' && httpReq.method === 'GET') {
+    httpRes.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      ...cors,
+    });
+    httpRes.write(`data: ${JSON.stringify({ type: 'connected', timestamp: Date.now() })}\n\n`);
+    sseClients.add(httpRes);
+    httpReq.on('close', () => {
+      sseClients.delete(httpRes);
+    });
+    return;
+  }
 
   let body: unknown;
   if (httpReq.method === 'POST' || httpReq.method === 'PUT') {

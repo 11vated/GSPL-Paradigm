@@ -535,6 +535,201 @@ export class ProviderRouter implements LLMProvider {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Resilient Provider — retry, circuit breaker, token tracking
+// ═══════════════════════════════════════════════════════════════════
+
+/** Circuit breaker states. */
+type CircuitState = 'closed' | 'open' | 'half_open';
+
+/** Token usage tracking per provider. */
+export interface TokenBudget {
+  readonly totalPromptTokens: number;
+  readonly totalCompletionTokens: number;
+  readonly maxBudget: number;
+  readonly remaining: number;
+}
+
+export interface ResilientProviderConfig {
+  /** Wrapped provider. */
+  readonly provider: LLMProvider;
+  /** Max retry attempts (default 3). */
+  readonly maxRetries?: number;
+  /** Base delay in ms for exponential backoff (default 1000). */
+  readonly baseDelayMs?: number;
+  /** Circuit breaker: failures before opening (default 5). */
+  readonly failureThreshold?: number;
+  /** Circuit breaker: ms before trying again (default 60000). */
+  readonly resetTimeoutMs?: number;
+  /** Max total tokens before refusing requests (default Infinity). */
+  readonly tokenBudget?: number;
+}
+
+/**
+ * Wraps any LLMProvider with production-grade resilience:
+ * - Exponential backoff retry (configurable attempts)
+ * - Circuit breaker (opens after N failures, resets after timeout)
+ * - Token usage tracking with configurable budget limits
+ * - Automatic failover logging
+ */
+export class ResilientProvider implements LLMProvider {
+  readonly name: string;
+  private readonly provider: LLMProvider;
+  private readonly maxRetries: number;
+  private readonly baseDelayMs: number;
+  private readonly failureThreshold: number;
+  private readonly resetTimeoutMs: number;
+  private readonly maxBudget: number;
+
+  // Circuit breaker state
+  private circuitState: CircuitState = 'closed';
+  private failureCount: number = 0;
+  private lastFailureTime: number = 0;
+
+  // Token tracking
+  private promptTokens: number = 0;
+  private completionTokens: number = 0;
+
+  constructor(config: ResilientProviderConfig) {
+    this.provider = config.provider;
+    this.name = `resilient:${config.provider.name}`;
+    this.maxRetries = config.maxRetries ?? 3;
+    this.baseDelayMs = config.baseDelayMs ?? 1000;
+    this.failureThreshold = config.failureThreshold ?? 5;
+    this.resetTimeoutMs = config.resetTimeoutMs ?? 60_000;
+    this.maxBudget = config.tokenBudget ?? Infinity;
+  }
+
+  async chat(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse> {
+    this.checkBudget();
+    this.checkCircuit();
+
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        const response = await this.provider.chat(messages, options);
+        this.recordSuccess();
+        this.trackTokens(response.usage);
+        return response;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        this.recordFailure();
+
+        if (attempt < this.maxRetries) {
+          const delay = this.baseDelayMs * Math.pow(2, attempt) + Math.random() * 500;
+          await sleep(delay);
+        }
+      }
+    }
+
+    throw lastError ?? new Error(`${this.name}: all retry attempts exhausted`);
+  }
+
+  async *stream(
+    messages: LLMMessage[],
+    options?: LLMOptions,
+  ): AsyncGenerator<string, void, undefined> {
+    this.checkBudget();
+    this.checkCircuit();
+
+    try {
+      yield* this.provider.stream(messages, options);
+      this.recordSuccess();
+    } catch (err) {
+      this.recordFailure();
+      throw err;
+    }
+  }
+
+  async isAvailable(): Promise<boolean> {
+    if (this.circuitState === 'open') {
+      if (Date.now() - this.lastFailureTime > this.resetTimeoutMs) {
+        this.circuitState = 'half_open';
+      } else {
+        return false;
+      }
+    }
+    return this.provider.isAvailable();
+  }
+
+  /** Get current token usage and budget. */
+  getTokenBudget(): TokenBudget {
+    const total = this.promptTokens + this.completionTokens;
+    return {
+      totalPromptTokens: this.promptTokens,
+      totalCompletionTokens: this.completionTokens,
+      maxBudget: this.maxBudget,
+      remaining: Math.max(0, this.maxBudget - total),
+    };
+  }
+
+  /** Get circuit breaker state. */
+  getCircuitState(): { state: CircuitState; failureCount: number } {
+    return { state: this.circuitState, failureCount: this.failureCount };
+  }
+
+  /** Reset token usage counter. */
+  resetTokenUsage(): void {
+    this.promptTokens = 0;
+    this.completionTokens = 0;
+  }
+
+  /** Reset circuit breaker. */
+  resetCircuit(): void {
+    this.circuitState = 'closed';
+    this.failureCount = 0;
+    this.lastFailureTime = 0;
+  }
+
+  private checkBudget(): void {
+    if (this.promptTokens + this.completionTokens >= this.maxBudget) {
+      throw new Error(
+        `${this.name}: token budget exhausted (${this.promptTokens + this.completionTokens}/${this.maxBudget}). Call resetTokenUsage() to continue.`,
+      );
+    }
+  }
+
+  private checkCircuit(): void {
+    if (this.circuitState === 'open') {
+      if (Date.now() - this.lastFailureTime > this.resetTimeoutMs) {
+        this.circuitState = 'half_open';
+      } else {
+        throw new Error(
+          `${this.name}: circuit breaker open (${this.failureCount} failures). Retry in ${Math.ceil((this.resetTimeoutMs - (Date.now() - this.lastFailureTime)) / 1000)}s.`,
+        );
+      }
+    }
+  }
+
+  private recordSuccess(): void {
+    if (this.circuitState === 'half_open') {
+      this.circuitState = 'closed';
+      this.failureCount = 0;
+    }
+  }
+
+  private recordFailure(): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    if (this.failureCount >= this.failureThreshold) {
+      this.circuitState = 'open';
+      console.warn(`[${this.name}] Circuit breaker opened after ${this.failureCount} failures`);
+    }
+  }
+
+  private trackTokens(usage?: LLMUsage): void {
+    if (usage) {
+      this.promptTokens += usage.promptTokens;
+      this.completionTokens += usage.completionTokens;
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // NLP Compiler — pattern-based intent classification (NO LLM required)
 // ═══════════════════════════════════════════════════════════════════
 
@@ -1717,3 +1912,13 @@ export class ToolBridge {
 // ═══════════════════════════════════════════════════════════════════
 
 export type { IntentType, ParsedIntent, SeedDomain, UniversalSeed, Gene, GeneMap };
+
+// ═══════════════════════════════════════════════════════════════════
+// Cloud LLM Providers
+// ═══════════════════════════════════════════════════════════════════
+
+export { ClaudeProvider } from './providers/claude.js';
+export { OpenAIProvider } from './providers/openai.js';
+export { GeminiProvider } from './providers/gemini.js';
+export { createProvider, detectAvailableProviders, getProviderConfig } from './providers/config.js';
+export type { ProviderConfig } from './providers/config.js';

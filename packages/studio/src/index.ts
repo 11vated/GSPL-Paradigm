@@ -1175,3 +1175,9 @@ export class StudioEngine {
     };
   }
 }
+
+/**
+ * Cross-platform desktop bridge alias.
+ * Use DesktopBridge for new code — works with both Tauri and Electron.
+ */
+export { ElectronBridge as DesktopBridge };

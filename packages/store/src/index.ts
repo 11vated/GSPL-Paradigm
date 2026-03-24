@@ -795,9 +795,15 @@ export const STORE_EVENTS = {
  * auto-save, import/export) behind a single constructor. Emits events
  * via EventBus when seeds are saved or deleted.
  *
+ * Use `StoreEngine.create()` for async initialization with environment-aware
+ * adapter selection (IndexedDB in browser, SQLite in Node, memory fallback).
+ *
  * @example
  * ```ts
- * const bus = new EventBus();
+ * // Async factory (recommended — auto-detects best adapter)
+ * const store = await StoreEngine.create({ eventBus: bus });
+ *
+ * // Sync constructor (memory adapter by default)
  * const store = new StoreEngine({ eventBus: bus });
  *
  * store.seeds.save(mySeed);         // Emits 'seed.created'
@@ -825,14 +831,18 @@ export class StoreEngine {
   readonly adapter: StorageAdapter;
   /** The event bus used for store events. */
   readonly eventBus: EventBus;
+  /** Schema version for migration tracking. */
+  readonly schemaVersion: number;
 
   constructor(options?: {
     adapter?: StorageAdapter;
     eventBus?: EventBus;
     maxSessionHistory?: number;
+    autoSaveIntervalMs?: number;
   }) {
     this.adapter = options?.adapter ?? new MemoryAdapter();
     this.eventBus = options?.eventBus ?? new EventBus();
+    this.schemaVersion = CURRENT_SCHEMA_VERSION;
 
     this.seeds = new SeedRepositoryWithEvents(this.adapter, this.eventBus);
     this.evolution = new EvolutionLog(this.adapter);
@@ -840,6 +850,238 @@ export class StoreEngine {
     this.session = new SessionStore({ maxHistory: options?.maxSessionHistory });
     this.autoSave = new AutoSave();
     this.importExport = new ImportExport();
+
+    // Run schema migrations
+    this.runMigrations();
+
+    // Start auto-save if interval provided
+    if (options?.autoSaveIntervalMs && options.autoSaveIntervalMs > 0) {
+      this.startAutoSave(options.autoSaveIntervalMs);
+    }
+  }
+
+  /**
+   * Async factory: create a StoreEngine with environment-aware adapter.
+   * Browser → IndexedDB (via CachedAsyncAdapter for sync API).
+   * Node.js → SQLite.
+   * Fallback → Memory.
+   */
+  static async create(options?: {
+    adapterType?: 'auto' | 'memory' | 'sqlite' | 'indexeddb';
+    dbPath?: string;
+    eventBus?: EventBus;
+    maxSessionHistory?: number;
+    autoSaveIntervalMs?: number;
+  }): Promise<StoreEngine> {
+    const { createStorageAdapter } = await import('./factory.js');
+    const rawAdapter = await createStorageAdapter({
+      type: options?.adapterType ?? 'auto',
+      dbPath: options?.dbPath,
+    });
+
+    // If the adapter is async (IndexedDB), wrap it in CachedAsyncAdapter
+    let adapter: StorageAdapter;
+    if (isAsyncAdapter(rawAdapter)) {
+      adapter = await CachedAsyncAdapter.create(rawAdapter);
+    } else {
+      adapter = rawAdapter;
+    }
+
+    return new StoreEngine({
+      adapter,
+      eventBus: options?.eventBus,
+      maxSessionHistory: options?.maxSessionHistory,
+      autoSaveIntervalMs: options?.autoSaveIntervalMs ?? 500,
+    });
+  }
+
+  /** Start debounced auto-save that persists dirty state to the adapter. */
+  startAutoSave(intervalMs: number): void {
+    this.autoSave.start(intervalMs, () => {
+      if (this.adapter instanceof CachedAsyncAdapter) {
+        this.adapter.flush().catch((err) => {
+          console.error('[StoreEngine] Auto-save flush failed:', err);
+        });
+      }
+    });
+  }
+
+  /** Stop auto-save and perform a final flush. */
+  async shutdown(): Promise<void> {
+    this.autoSave.stop();
+    if (this.adapter instanceof CachedAsyncAdapter) {
+      await this.adapter.flush();
+    }
+  }
+
+  /** Run schema migrations if needed. */
+  private runMigrations(): void {
+    const versionKey = '__schema_version__';
+    const rawVersion = this.adapter.get(versionKey);
+    const currentVersion = rawVersion !== undefined ? parseInt(rawVersion, 10) : 0;
+
+    if (currentVersion < CURRENT_SCHEMA_VERSION) {
+      for (const migration of MIGRATIONS) {
+        if (migration.version > currentVersion) {
+          try {
+            migration.migrate(this.adapter);
+          } catch (err) {
+            console.error(`[StoreEngine] Migration v${migration.version} failed:`, err);
+            break;
+          }
+        }
+      }
+      this.adapter.set(versionKey, String(CURRENT_SCHEMA_VERSION));
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// Schema Migrations
+// ─────────────────────────────────────────────
+
+const CURRENT_SCHEMA_VERSION = 1;
+
+interface Migration {
+  readonly version: number;
+  readonly description: string;
+  migrate(adapter: StorageAdapter): void;
+}
+
+/** Migration registry. Add new migrations here as the schema evolves. */
+const MIGRATIONS: Migration[] = [
+  {
+    version: 1,
+    description: 'Initial schema — no migration needed',
+    migrate(_adapter: StorageAdapter): void {
+      // v1 is the initial schema, no transformation required.
+    },
+  },
+];
+
+// ─────────────────────────────────────────────
+// CachedAsyncAdapter — Sync wrapper for async adapters
+// ─────────────────────────────────────────────
+
+/**
+ * Type guard for async storage adapters.
+ * Tests whether get() returns a Promise (thenable) vs a plain value.
+ */
+function isAsyncAdapter(adapter: StorageAdapter | import('./indexeddb-adapter.js').AsyncStorageAdapter): adapter is import('./indexeddb-adapter.js').AsyncStorageAdapter {
+  try {
+    const result = adapter.get('__type_probe__');
+    return result !== null && typeof result === 'object' && 'then' in result;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Wraps an AsyncStorageAdapter (e.g., IndexedDB) with an in-memory cache
+ * that provides the sync StorageAdapter interface. All reads come from cache;
+ * writes are cached immediately and flushed to the backing store asynchronously.
+ */
+export class CachedAsyncAdapter implements StorageAdapter {
+  private readonly cache: Map<string, string> = new Map();
+  private readonly dirty: Set<string> = new Set();
+  private readonly deleted: Set<string> = new Set();
+  private readonly backing: import('./indexeddb-adapter.js').AsyncStorageAdapter;
+  private flushPromise: Promise<void> | null = null;
+
+  private constructor(backing: import('./indexeddb-adapter.js').AsyncStorageAdapter) {
+    this.backing = backing;
+  }
+
+  /**
+   * Create and initialize a CachedAsyncAdapter by loading all existing
+   * data from the backing store into memory.
+   */
+  static async create(
+    backing: import('./indexeddb-adapter.js').AsyncStorageAdapter,
+  ): Promise<CachedAsyncAdapter> {
+    const adapter = new CachedAsyncAdapter(backing);
+    const keys = await backing.keys();
+    for (const key of keys) {
+      const value = await backing.get(key);
+      if (value !== undefined) {
+        adapter.cache.set(key, value);
+      }
+    }
+    return adapter;
+  }
+
+  get(key: string): string | undefined {
+    return this.cache.get(key);
+  }
+
+  set(key: string, value: string): void {
+    this.cache.set(key, value);
+    this.dirty.add(key);
+    this.deleted.delete(key);
+  }
+
+  delete(key: string): boolean {
+    const existed = this.cache.has(key);
+    this.cache.delete(key);
+    this.dirty.delete(key);
+    if (existed) {
+      this.deleted.add(key);
+    }
+    return existed;
+  }
+
+  has(key: string): boolean {
+    return this.cache.has(key);
+  }
+
+  keys(): string[] {
+    return Array.from(this.cache.keys());
+  }
+
+  clear(): void {
+    for (const key of this.cache.keys()) {
+      this.deleted.add(key);
+    }
+    this.cache.clear();
+    this.dirty.clear();
+  }
+
+  /**
+   * Flush all dirty writes and deletes to the backing async store.
+   * Safe to call concurrently — subsequent calls wait for the current flush.
+   */
+  async flush(): Promise<void> {
+    if (this.flushPromise) {
+      return this.flushPromise;
+    }
+
+    this.flushPromise = this.doFlush();
+    try {
+      await this.flushPromise;
+    } finally {
+      this.flushPromise = null;
+    }
+  }
+
+  private async doFlush(): Promise<void> {
+    // Snapshot and clear dirty/deleted sets
+    const dirtyKeys = Array.from(this.dirty);
+    const deletedKeys = Array.from(this.deleted);
+    this.dirty.clear();
+    this.deleted.clear();
+
+    // Write dirty keys
+    for (const key of dirtyKeys) {
+      const value = this.cache.get(key);
+      if (value !== undefined) {
+        await this.backing.set(key, value);
+      }
+    }
+
+    // Delete removed keys
+    for (const key of deletedKeys) {
+      await this.backing.delete(key);
+    }
   }
 }
 
@@ -890,3 +1132,8 @@ class SeedRepositoryWithEvents extends SeedRepository {
 // ─────────────────────────────────────────────
 
 export type { EvolutionLogEntry as EvolutionEntry };
+
+export { SqliteAdapter } from './sqlite-adapter.js';
+export type { AsyncStorageAdapter } from './indexeddb-adapter.js';
+export { IndexedDBAdapter } from './indexeddb-adapter.js';
+export { createStorageAdapter } from './factory.js';

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/main/crates/tauri-config-schema/schema.json",
+  "productName": "GSPL Paradigm",
+  "version": "1.0.0",
+  "identifier": "com.paradigm.gspl",
+  "build": {
+    "frontendDist": "../../packages/ui/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm --filter @paradigm/ui dev",
+    "beforeBuildCommand": "pnpm --filter @paradigm/ui build"
+  },
+  "app": {
+    "title": "GSPL Paradigm — The Living World Compiler",
+    "windows": [
+      {
+        "title": "GSPL Paradigm",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 800,
+        "minHeight": 600,
+        "decorations": true,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:5001 ws://localhost:5001; img-src 'self' data: blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

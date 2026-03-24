@@ -1,0 +1,21 @@
+@gseed 1.0
+@domain organism
+@ecosystem fantasy
+
+seed "Storm Warrior" organism {
+  health: scalar(120, 0, 200);
+  attack: scalar(75, 0, 100);
+  defense: scalar(50, 0, 100);
+  speed: scalar(65, 0, 100);
+  stamina: scalar(80, 0, 100);
+  role: categorical("warrior", ["warrior", "mage", "rogue", "healer", "ranger"]);
+  element: categorical("lightning", ["fire", "ice", "lightning", "shadow", "nature"]);
+  weapon_type: categorical("greatsword", ["sword", "greatsword", "bow", "staff", "daggers"]);
+  armor_type: categorical("heavy", ["cloth", "leather", "chain", "heavy"]);
+  color: vector([0.3, 0.5, 0.9]);
+  position: vector([0, 0, 0]);
+  aggression: scalar(0.7, 0, 1);
+  loyalty: scalar(0.9, 0, 1);
+  experience: scalar(0, 0, 10000);
+  level: scalar(1, 1, 100);
+}

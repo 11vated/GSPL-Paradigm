@@ -1,0 +1,19 @@
+@gseed 1.0
+@domain terrain
+@ecosystem underground
+
+seed "Crystal Cave" terrain {
+  height: scalar(0.3, 0, 1);
+  moisture: scalar(0.7, 0, 1);
+  temperature: scalar(0.4, 0, 1);
+  biome: categorical("cave", ["forest", "desert", "cave", "ocean", "mountain", "swamp"]);
+  material: categorical("crystal", ["stone", "crystal", "obsidian", "ice", "coral"]);
+  light_level: scalar(0.2, 0, 1);
+  color: vector([0.5, 0.2, 0.8]);
+  size: vector([100, 30, 80]);
+  complexity: scalar(0.8, 0, 1);
+  resource_density: scalar(0.6, 0, 1);
+  danger_level: scalar(0.5, 0, 1);
+  ambient_sound: categorical("dripping", ["wind", "dripping", "lava", "silence", "insects"]);
+  treasure_rating: scalar(0.7, 0, 1);
+}

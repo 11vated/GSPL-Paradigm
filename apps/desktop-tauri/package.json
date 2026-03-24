@@ -1,0 +1,16 @@
+{
+  "name": "@paradigm/desktop-tauri",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build:desktop": "tauri build",
+    "tauri": "tauri",
+    "build": "echo 'Tauri builds via cargo — use build:desktop'",
+    "test": "echo 'No tests'",
+    "typecheck": "echo 'Rust typechecks via cargo'"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0"
+  }
+}

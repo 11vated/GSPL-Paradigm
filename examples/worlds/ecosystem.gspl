@@ -1,0 +1,57 @@
+@gseed 1.0
+@domain simulation
+@ecosystem living_world
+
+// A complete ecosystem with predators, prey, and terrain
+// Evolve this world to discover emergent food chains and behaviors
+
+seed "Wolf Pack Alpha" organism {
+  health: scalar(80, 0, 150);
+  attack: scalar(60, 0, 100);
+  defense: scalar(30, 0, 100);
+  speed: scalar(75, 0, 100);
+  role: categorical("predator", ["predator", "prey", "neutral"]);
+  pack_size: scalar(5, 1, 20);
+  aggression: scalar(0.7, 0, 1);
+  hunger: scalar(0.5, 0, 1);
+  color: vector([0.4, 0.4, 0.5]);
+}
+
+seed "Deer Herd" organism {
+  health: scalar(50, 0, 100);
+  attack: scalar(5, 0, 100);
+  defense: scalar(15, 0, 100);
+  speed: scalar(80, 0, 100);
+  role: categorical("prey", ["predator", "prey", "neutral"]);
+  herd_size: scalar(12, 1, 50);
+  alertness: scalar(0.8, 0, 1);
+  color: vector([0.6, 0.4, 0.2]);
+}
+
+seed "Ancient Oak Grove" plant {
+  health: scalar(300, 0, 500);
+  size: scalar(8, 0.1, 20);
+  resource_output: scalar(0.6, 0, 1);
+  shelter_rating: scalar(0.7, 0, 1);
+  age: scalar(200, 0, 1000);
+  color: vector([0.2, 0.5, 0.15]);
+}
+
+seed "Mountain Pass" terrain {
+  height: scalar(0.7, 0, 1);
+  moisture: scalar(0.3, 0, 1);
+  temperature: scalar(0.35, 0, 1);
+  biome: categorical("mountain", ["forest", "mountain", "plains", "tundra"]);
+  traversability: scalar(0.4, 0, 1);
+  danger_level: scalar(0.6, 0, 1);
+}
+
+seed "River of Life" terrain {
+  height: scalar(0.2, 0, 1);
+  moisture: scalar(1.0, 0, 1);
+  temperature: scalar(0.5, 0, 1);
+  biome: categorical("river", ["river", "lake", "ocean", "swamp"]);
+  flow_rate: scalar(0.6, 0, 1);
+  fish_density: scalar(0.7, 0, 1);
+  color: vector([0.1, 0.3, 0.7]);
+}

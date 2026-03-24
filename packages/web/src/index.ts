@@ -12,6 +12,7 @@
 import type {
   UniversalSeed,
   GeneMap,
+  Gene,
   SeedDomain,
   FitnessVector,
 } from '@paradigm/types';
@@ -19,10 +20,21 @@ import type {
 import { DeterministicRNG, computeQuickHash } from '@paradigm/rng';
 import { EventBus } from '@paradigm/events';
 import { createSeed, mutateSeed, breedSeeds } from '@paradigm/seed';
-import { GSPLAgent } from '@paradigm/agent';
+import { GSPLAgent, EnhancedGSPLAgent, ConceptReasoner, CreativeSynthesizer } from '@paradigm/agent';
 import type { AgentResponse } from '@paradigm/agent';
 import { Forge } from '@paradigm/forge';
 import type { ArtifactType as ForgeArtifactType, Artifact as ForgeArtifactResult } from '@paradigm/forge';
+import { StoreEngine, type SeedRepository } from '@paradigm/store';
+import { ConceptToEntityPipeline, EnhancedConceptPipeline } from '@paradigm/concept';
+import type { EntityBlueprint } from '@paradigm/types';
+import { compileSeedShader, getVertexShader } from '@paradigm/renderer';
+import { SpriteEngine } from '@paradigm/sprites';
+import { Interpreter, World, type ExecutionResult, type WorldConfig } from '@paradigm/runtime';
+import { BehaviorEngine, Blackboard } from '@paradigm/behavior';
+import { MarkovNameGenerator, NoiseGenerator, ContentPipeline, GenerateEngine } from '@paradigm/generate';
+import { EngineRegistry } from '@paradigm/engines';
+import { Lexer, Parser } from '@paradigm/lang';
+import { RateLimiter, RequestLogger, formatRateLimitError } from './middleware.js';
 
 // ─────────────────────────────────────────────
 // HTTP Types
@@ -108,6 +120,59 @@ function stringField(obj: Record<string, unknown>, key: string): string | undefi
 function numberField(obj: Record<string, unknown>, key: string): number | undefined {
   const val = obj[key];
   return typeof val === 'number' && isFinite(val) ? val : undefined;
+}
+
+// ─────────────────────────────────────────────
+// PersistentSeedMap — Map adapter backed by StoreEngine
+// ─────────────────────────────────────────────
+
+/**
+ * Map-like adapter that delegates to SeedRepository from @paradigm/store.
+ * Controllers continue using the familiar Map<string, UniversalSeed> interface
+ * while all data is transparently persisted to IndexedDB/SQLite.
+ */
+export class PersistentSeedMap {
+  private readonly repo: SeedRepository;
+
+  constructor(repo: SeedRepository) {
+    this.repo = repo;
+  }
+
+  get(hash: string): UniversalSeed | undefined {
+    return this.repo.get(hash);
+  }
+
+  set(hash: string, seed: UniversalSeed): this {
+    this.repo.save(seed);
+    return this;
+  }
+
+  has(hash: string): boolean {
+    return this.repo.get(hash) !== undefined;
+  }
+
+  delete(hash: string): boolean {
+    return this.repo.delete(hash);
+  }
+
+  clear(): void {
+    for (const seed of this.repo.getAll()) {
+      this.repo.delete(seed.$hash);
+    }
+  }
+
+  values(): IterableIterator<UniversalSeed> {
+    return this.repo.getAll()[Symbol.iterator]();
+  }
+
+  get size(): number {
+    return this.repo.count();
+  }
+
+  [Symbol.iterator](): IterableIterator<[string, UniversalSeed]> {
+    const all = this.repo.getAll();
+    return all.map((s): [string, UniversalSeed] => [s.$hash, s])[Symbol.iterator]();
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -208,13 +273,14 @@ function normalizePath(path: string): string {
  * operators to maintain reproducibility.
  */
 export class SeedController {
-  private readonly seeds: Map<string, UniversalSeed> = new Map();
+  private readonly seeds: PersistentSeedMap | Map<string, UniversalSeed>;
   private readonly rng: DeterministicRNG;
   private readonly eventBus: EventBus;
 
-  constructor(rng: DeterministicRNG, eventBus: EventBus) {
+  constructor(rng: DeterministicRNG, eventBus: EventBus, seedMap?: PersistentSeedMap) {
     this.rng = rng;
     this.eventBus = eventBus;
+    this.seeds = seedMap ?? new Map<string, UniversalSeed>();
   }
 
   /** Register all seed routes on the given router. */
@@ -229,7 +295,7 @@ export class SeedController {
   }
 
   /** Get the internal seed store (for other controllers to access). */
-  getStore(): Map<string, UniversalSeed> {
+  getStore(): PersistentSeedMap | Map<string, UniversalSeed> {
     return this.seeds;
   }
 
@@ -255,7 +321,27 @@ export class SeedController {
     }
 
     const genesRaw = req.body['genes'];
-    const genes: GeneMap = isRecord(genesRaw) ? genesRaw as GeneMap : WebEngine.deriveGenes(name, domain, this.rng);
+    let genes: GeneMap;
+
+    if (isRecord(genesRaw)) {
+      // Explicit genes provided — use them directly
+      genes = genesRaw as GeneMap;
+    } else {
+      // No genes provided — use v2 EnhancedConceptPipeline for ontology-aware genes
+      try {
+        const enhanced = new EnhancedConceptPipeline();
+        const result = enhanced.execute(name, this.rng);
+        genes = result.seed.genes;
+      } catch {
+        try {
+          const pipeline = new ConceptToEntityPipeline();
+          const blueprint = pipeline.execute(name, this.rng);
+          genes = blueprint.seed.genes;
+        } catch {
+          genes = WebEngine.deriveGenes(name, domain, this.rng);
+        }
+      }
+    }
 
     const seed = createSeed(name, domain, genes, this.rng);
     this.seeds.set(seed.$hash, seed);
@@ -453,13 +539,13 @@ export interface EvolutionStatus {
  * breed + mutate operators from @paradigm/seed.
  */
 export class EvolutionController {
-  private readonly seedStore: Map<string, UniversalSeed>;
+  private readonly seedStore: PersistentSeedMap | Map<string, UniversalSeed>;
   private readonly rng: DeterministicRNG;
   private readonly eventBus: EventBus;
   private status: EvolutionStatus;
 
   constructor(
-    seedStore: Map<string, UniversalSeed>,
+    seedStore: PersistentSeedMap | Map<string, UniversalSeed>,
     rng: DeterministicRNG,
     eventBus: EventBus,
   ) {
@@ -520,7 +606,23 @@ export class EvolutionController {
       averageFitness: 0,
     };
 
-    let currentPopulation = population;
+    // Fitness evaluation: score seeds by normalized scalar gene values
+    const evaluateFitness = (seed: UniversalSeed): number => {
+      const scalars = Object.values(seed.genes)
+        .filter((g): g is Extract<Gene, { type: 'scalar' }> => g.type === 'scalar');
+      if (scalars.length === 0) return 0;
+      const normalized = scalars.reduce((sum, g) => {
+        const range = g.max - g.min;
+        return sum + (range > 0 ? (g.value - g.min) / range : 0);
+      }, 0);
+      return Math.max(0, Math.min(1, normalized / scalars.length));
+    };
+
+    // Apply initial fitness to population
+    let currentPopulation: UniversalSeed[] = population.map(s => {
+      const scored: UniversalSeed = { ...s, $fitness: { primary: evaluateFitness(s) } };
+      return scored;
+    });
     const totalGens = Math.floor(generations);
 
     for (let gen = 0; gen < totalGens; gen++) {
@@ -546,7 +648,8 @@ export class EvolutionController {
 
         const child = breedSeeds(parentA, parentB, 'uniform', 0.5, this.rng);
         const mutated = mutateSeed(child, clampedRate, this.rng);
-        nextGen.push(mutated);
+        const scored: UniversalSeed = { ...mutated, $fitness: { primary: evaluateFitness(mutated) } };
+        nextGen.push(scored);
       }
 
       currentPopulation = nextGen;
@@ -684,11 +787,11 @@ export class EvolutionController {
  * World state controller for global status, health checks, and reset.
  */
 export class WorldController {
-  private readonly seedStore: Map<string, UniversalSeed>;
+  private readonly seedStore: PersistentSeedMap | Map<string, UniversalSeed>;
   private readonly eventBus: EventBus;
   private readonly startTime: number;
 
-  constructor(seedStore: Map<string, UniversalSeed>, eventBus: EventBus) {
+  constructor(seedStore: PersistentSeedMap | Map<string, UniversalSeed>, eventBus: EventBus) {
     this.seedStore = seedStore;
     this.eventBus = eventBus;
     this.startTime = Date.now();
@@ -767,12 +870,12 @@ export interface ForgeArtifact {
  * Produces actual artifact content — HTML pages, games, shaders, music, sprites, etc.
  */
 export class ForgeController {
-  private readonly seedStore: Map<string, UniversalSeed>;
+  private readonly seedStore: PersistentSeedMap | Map<string, UniversalSeed>;
   private readonly forge: Forge;
   private readonly artifacts: Map<string, ForgeArtifact> = new Map();
   private readonly eventBus: EventBus;
 
-  constructor(seedStore: Map<string, UniversalSeed>, forge: Forge, eventBus: EventBus) {
+  constructor(seedStore: PersistentSeedMap | Map<string, UniversalSeed>, forge: Forge, eventBus: EventBus) {
     this.seedStore = seedStore;
     this.forge = forge;
     this.eventBus = eventBus;
@@ -891,7 +994,7 @@ export class AgentController {
     router.addRoute('GET', '/api/agent/status', () => this.handleStatus());
   }
 
-  /** POST /api/chat — Process message through the 10-stage agent pipeline. */
+  /** POST /api/chat — Process message through the 10-stage agent pipeline with v2 cognition. */
   private async handleChat(req: Request): Promise<Response> {
     if (!isRecord(req.body)) {
       return badRequest('Request body must be a JSON object with { message }');
@@ -905,10 +1008,74 @@ export class AgentController {
     this.messageCount += 1;
     this.lastMessageAt = Date.now();
 
+    // Handle "surprise me" — creative intelligence (Tier 4)
+    const isSurprise = /surprise\s*me|random\s*entity|something\s*new|novel\s*concept/i.test(message);
+    if (isSurprise && this.agent instanceof EnhancedGSPLAgent) {
+      const enhAgent = this.agent as EnhancedGSPLAgent;
+      const novel = enhAgent.synthesizer.suggestNovel([]);
+      if (novel.length > 0) {
+        const conceptDesc = novel[0]!;
+        const result: AgentResponse = await this.agent.process(`create ${conceptDesc}`);
+
+        // Add ontology reasoning
+        const reasoning = enhAgent.conceptReasoner.reason(conceptDesc);
+
+        return ok({
+          reply: result.message,
+          message: result.message,
+          success: result.success,
+          intent: result.intent,
+          plan: result.plan,
+          toolsUsed: result.toolsUsed,
+          data: result.data,
+          reflections: result.reflections,
+          messageId: this.messageCount,
+          timestamp: this.lastMessageAt,
+          creative: {
+            novelConcept: conceptDesc,
+            alternatives: novel.slice(1),
+          },
+          reasoning: {
+            implications: [...reasoning.implications],
+            emergent: [...reasoning.emergentProperties],
+            quality: reasoning.qualityScore,
+          },
+        });
+      }
+    }
+
+    // Standard processing
     const result: AgentResponse = await this.agent.process(message);
+
+    // Add proactive suggestions via ontology reasoning (Tier 3)
+    let suggestions: string[] = [];
+    let reasoning: { implications: string[]; emergent: string[]; quality: number } | undefined;
+
+    if (this.agent instanceof EnhancedGSPLAgent) {
+      const enhAgent = this.agent as EnhancedGSPLAgent;
+      const conceptReasoning = enhAgent.conceptReasoner.reason(message);
+      suggestions = [...conceptReasoning.suggestions];
+      reasoning = {
+        implications: [...conceptReasoning.implications],
+        emergent: [...conceptReasoning.emergentProperties],
+        quality: conceptReasoning.qualityScore,
+      };
+
+      // After creating an entity, suggest a rival (Tier 3 proactive)
+      if (result.intent?.type === 'create' && conceptReasoning.ontologyAnalysis.archetype) {
+        const rival = enhAgent.synthesizer.generateRival(message);
+        suggestions.push(`This entity could use a rival. Try: "${rival}"`);
+      }
+
+      // Suggest missing elements
+      if (result.intent?.type === 'create' && conceptReasoning.ontologyAnalysis.elements.length === 0) {
+        suggestions.push('No elemental affinity — adding an element (fire, ice, lightning, etc.) would enhance abilities and visual effects.');
+      }
+    }
 
     return ok({
       reply: result.message,
+      message: result.message,
       success: result.success,
       intent: result.intent,
       plan: result.plan,
@@ -917,6 +1084,8 @@ export class AgentController {
       reflections: result.reflections,
       messageId: this.messageCount,
       timestamp: this.lastMessageAt,
+      suggestions: suggestions.length > 0 ? suggestions : undefined,
+      reasoning,
     });
   }
 
@@ -946,10 +1115,10 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
  * Export controller for importing and exporting seed collections.
  */
 export class ExportController {
-  private readonly seedStore: Map<string, UniversalSeed>;
+  private readonly seedStore: PersistentSeedMap | Map<string, UniversalSeed>;
   private readonly eventBus: EventBus;
 
-  constructor(seedStore: Map<string, UniversalSeed>, eventBus: EventBus) {
+  constructor(seedStore: PersistentSeedMap | Map<string, UniversalSeed>, eventBus: EventBus) {
     this.seedStore = seedStore;
     this.eventBus = eventBus;
   }
@@ -1230,6 +1399,8 @@ export class WebEngine {
   readonly sse: SSEManager;
   readonly config: ServerConfig;
   readonly eventBus: EventBus;
+  /** Persistent store engine (available when created via WebEngine.create()). */
+  readonly store: StoreEngine | null;
 
   private readonly rng: DeterministicRNG;
   private readonly agent: GSPLAgent;
@@ -1240,22 +1411,35 @@ export class WebEngine {
   private readonly forgeController: ForgeController;
   private readonly agentController: AgentController;
   private readonly exportController: ExportController;
+  private readonly behaviorEngine: BehaviorEngine;
+  private readonly engineRegistry: EngineRegistry;
+  private readonly generateEngine: GenerateEngine;
   private readonly startTime: number;
+  private readonly _rateLimiter: RateLimiter | null;
+  private readonly _agentRateLimiter: RateLimiter | null;
+  private readonly _requestLogger: RequestLogger | null;
 
-  constructor(config?: Partial<ServerConfig>, rng?: DeterministicRNG) {
+  constructor(config?: Partial<ServerConfig>, rng?: DeterministicRNG, storeEngine?: StoreEngine) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.rng = rng ?? new DeterministicRNG('gspl-paradigm-web');
     this.router = new Router();
     this.sse = new SSEManager();
-    this.eventBus = new EventBus({ maxReplaySize: 100 });
+    this.eventBus = storeEngine?.eventBus ?? new EventBus({ maxReplaySize: 100 });
+    this.store = storeEngine ?? null;
     this.startTime = Date.now();
 
     // Core engine instances
-    this.agent = new GSPLAgent({ rngSeed: 42 });
+    this.agent = new EnhancedGSPLAgent({ rngSeed: 42 });
     this.forge = new Forge(this.rng);
+    this.behaviorEngine = new BehaviorEngine(this.rng.fork('behavior'));
+    this.engineRegistry = new EngineRegistry(this.rng.fork('engines'));
+    this.generateEngine = new GenerateEngine(this.rng.fork('generate'));
 
-    // Initialize controllers
-    this.seedController = new SeedController(this.rng, this.eventBus);
+    // Initialize controllers — use PersistentSeedMap if StoreEngine is available
+    const seedMap = storeEngine
+      ? new PersistentSeedMap(storeEngine.seeds)
+      : undefined;
+    this.seedController = new SeedController(this.rng, this.eventBus, seedMap);
     this.evolutionController = new EvolutionController(
       this.seedController.getStore(),
       this.rng,
@@ -1292,10 +1476,591 @@ export class WebEngine {
       this.sse.broadcast(event.type, event);
     });
 
-    // Load starter seeds
-    const starters = createStarterSeeds(this.rng);
-    for (const seed of starters) {
-      this.seedController.addSeed(seed);
+    // Load starter seeds (only if store is empty)
+    if (this.seedController.getStore().size === 0) {
+      const starters = createStarterSeeds(this.rng);
+      for (const seed of starters) {
+        this.seedController.addSeed(seed);
+      }
+    }
+
+    // Initialize rate limiters and request logger
+    this._rateLimiter = new RateLimiter(100, 1000);      // 100 req/s for general API
+    this._agentRateLimiter = new RateLimiter(10, 1000);   // 10 req/s for agent/LLM endpoints
+    this._requestLogger = new RequestLogger(1000);
+
+    // Register additional routes (batch, lineage, search, diagnostics)
+    this.registerAdditionalRoutes();
+  }
+
+  /** Register batch, lineage, search, concept, shader, and diagnostics routes. */
+  private registerAdditionalRoutes(): void {
+    const store = this.seedController.getStore();
+    const rng = this.rng;
+    const eventBus = this.eventBus;
+
+    // POST /api/concept/compile — Full concept-to-entity pipeline
+    this.router.addRoute('POST', '/api/concept/compile', (req) => {
+      if (!isRecord(req.body)) {
+        return badRequest('Request body must be a JSON object with { description, style? }');
+      }
+
+      const description = stringField(req.body, 'description');
+      if (!description || description.trim().length === 0) {
+        return badRequest('Field "description" is required');
+      }
+
+      const style = stringField(req.body, 'style') as import('@paradigm/types').StyleType | undefined;
+
+      try {
+        const pipeline = new ConceptToEntityPipeline();
+        const blueprint = pipeline.execute(description, rng, { style });
+
+        // Store the seed
+        store.set(blueprint.seed.$hash, blueprint.seed);
+        eventBus.emit({ type: 'seed.created', seed: blueprint.seed, timestamp: Date.now() });
+
+        return created({
+          blueprint: {
+            concept: blueprint.concept,
+            seedHash: blueprint.seed.$hash,
+            skeletonType: blueprint.skeletonType,
+            spriteConfig: blueprint.spriteConfig,
+          },
+          seed: blueprint.seed,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Concept compilation failed';
+        return serverError(message);
+      }
+    });
+
+    // POST /api/concept/enhanced — v2 Enhanced pipeline with ontology, power system, transforms
+    this.router.addRoute('POST', '/api/concept/enhanced', (req) => {
+      if (!isRecord(req.body)) {
+        return badRequest('Request body must be { description, style? }');
+      }
+      const description = stringField(req.body, 'description');
+      if (!description || description.trim().length === 0) {
+        return badRequest('Field "description" is required');
+      }
+      const style = stringField(req.body, 'style') as import('@paradigm/types').StyleType | undefined;
+
+      try {
+        const enhanced = new EnhancedConceptPipeline();
+        const result = enhanced.execute(description, rng, { style });
+
+        store.set(result.seed.$hash, result.seed);
+        eventBus.emit({ type: 'seed.created', seed: result.seed, timestamp: Date.now() });
+
+        return created({
+          seed: result.seed,
+          dimensions: result.dimensions,
+          conceptGraph: {
+            nodes: result.conceptGraph.nodes,
+            powerSystem: result.conceptGraph.powerSystem,
+            transformations: result.conceptGraph.transformations,
+          },
+          validation: {
+            status: result.validationStatus,
+            errors: result.validationErrors,
+          },
+          ontologyStats: enhanced.getOntology().stats(),
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Enhanced compilation failed';
+        return serverError(message);
+      }
+    });
+
+    // GET /api/ontology/stats — Return ontology taxonomy sizes
+    this.router.addRoute('GET', '/api/ontology/stats', () => {
+      const engine = new EnhancedConceptPipeline();
+      return ok(engine.getOntology().stats());
+    });
+
+    // POST /api/ontology/analyze — Analyze concept through ontology without creating seed
+    this.router.addRoute('POST', '/api/ontology/analyze', (req) => {
+      if (!isRecord(req.body)) return badRequest('Request body must be { text }');
+      const text = stringField(req.body, 'text');
+      if (!text) return badRequest('Field "text" is required');
+
+      const engine = new EnhancedConceptPipeline();
+      const ontology = engine.getOntology();
+      const analysis = ontology.analyze(text);
+      return ok({ analysis, stats: ontology.stats() });
+    });
+
+    // GET /api/seed/:id/sprite — Generate sprite sheet from seed
+    this.router.addRoute('GET', '/api/seed/:id/sprite', (req) => {
+      const id = req.params['id'];
+      if (!id) return badRequest('Missing seed id');
+
+      const seed = store.get(id);
+      if (!seed) return notFound(`Seed not found: ${id}`);
+
+      try {
+        const spriteEngine = new SpriteEngine(rng.fork(`sprite:${id}`));
+        const spriteSheet = spriteEngine.fromSeed(seed);
+        const pixelArt = spriteEngine.generatePixelArt(seed, 64, 64);
+        const palette = spriteEngine.generatePalette(seed);
+        const jsonExport = spriteEngine.export(spriteSheet, 'json');
+
+        return ok({
+          seedHash: seed.$hash,
+          seedName: seed.$name,
+          spriteSheet,
+          pixelArt: {
+            width: pixelArt.width,
+            height: pixelArt.height,
+            pixelCount: pixelArt.width * pixelArt.height,
+          },
+          palette,
+          exportFormats: {
+            json: jsonExport,
+          },
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Sprite generation failed';
+        return serverError(message);
+      }
+    });
+
+    // POST /api/seed/:id/sprite/export — Export sprite in specific format
+    this.router.addRoute('POST', '/api/seed/:id/sprite/export', (req) => {
+      const id = req.params['id'];
+      if (!id) return badRequest('Missing seed id');
+
+      const seed = store.get(id);
+      if (!seed) return notFound(`Seed not found: ${id}`);
+
+      const format = isRecord(req.body) ? stringField(req.body, 'format') ?? 'json' : 'json';
+      const validFormats = ['json', 'godot', 'css', 'html'] as const;
+      if (!validFormats.includes(format as typeof validFormats[number])) {
+        return badRequest(`Invalid format "${format}". Valid: ${validFormats.join(', ')}`);
+      }
+
+      try {
+        const spriteEngine = new SpriteEngine(rng.fork(`sprite:${id}`));
+        const spriteSheet = spriteEngine.fromSeed(seed);
+        const exported = spriteEngine.export(spriteSheet, format as 'json' | 'godot' | 'css' | 'html');
+        return ok({ seedHash: id, format, content: exported, size: exported.length });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Sprite export failed';
+        return serverError(message);
+      }
+    });
+
+    // GET /api/seed/:id/shader — Compile seed to GLSL SDF shader
+    this.router.addRoute('GET', '/api/seed/:id/shader', (req) => {
+      const id = req.params['id'];
+      if (!id) return badRequest('Missing seed id parameter');
+
+      const seed = store.get(id);
+      if (!seed) return notFound(`Seed not found: ${id}`);
+
+      try {
+        const fragmentShader = compileSeedShader(seed);
+        const vertexShader = getVertexShader();
+        return ok({ fragmentShader, vertexShader, seedHash: seed.$hash, seedName: seed.$name });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Shader compilation failed';
+        return serverError(`Shader compile error: ${message}`);
+      }
+    });
+
+    // ── GSPL Runtime Routes ────────────────────────────────────
+
+    // POST /api/gspl/execute — Parse and interpret GSPL code
+    this.router.addRoute('POST', '/api/gspl/execute', (req) => {
+      if (!isRecord(req.body)) {
+        return badRequest('Request body must be { code: string }');
+      }
+      const code = stringField(req.body, 'code');
+      if (!code || code.trim().length === 0) {
+        return badRequest('Field "code" is required');
+      }
+
+      try {
+        const lexer = new Lexer(code);
+        const tokens = lexer.tokenize();
+        const parser = new Parser(tokens);
+        const parseResult = parser.parse();
+
+        if (!parseResult.program) {
+          return badRequest(`Parse errors: ${parseResult.errors.map(e => e.message).join('; ')}`);
+        }
+
+        const interpreter = new Interpreter({}, rng.fork('gspl-exec'));
+        const result = interpreter.execute(parseResult.program);
+
+        return ok({
+          success: result.success,
+          value: result.value,
+          error: result.error,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'GSPL execution failed';
+        return serverError(message);
+      }
+    });
+
+    // POST /api/gspl/parse — Parse GSPL code to AST (no execution)
+    this.router.addRoute('POST', '/api/gspl/parse', (req) => {
+      if (!isRecord(req.body)) {
+        return badRequest('Request body must be { code: string }');
+      }
+      const code = stringField(req.body, 'code');
+      if (!code) return badRequest('Field "code" is required');
+
+      try {
+        const lexer = new Lexer(code);
+        const tokens = lexer.tokenize();
+        const parser = new Parser(tokens);
+        const parseResult = parser.parse();
+        if (!parseResult.program) {
+          return badRequest(`Parse errors: ${parseResult.errors.map(e => e.message).join('; ')}`);
+        }
+        return ok({ ast: parseResult.program, tokenCount: tokens.length, declarationCount: parseResult.program.declarations.length, errors: parseResult.errors });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Parse error';
+        return badRequest(`Parse error: ${message}`);
+      }
+    });
+
+    // ── Behavior Routes ──────────────────────────────────────
+
+    // GET /api/seed/:id/behavior — Generate behavior tree for a seed
+    this.router.addRoute('GET', '/api/seed/:id/behavior', (req) => {
+      const id = req.params['id'];
+      if (!id) return badRequest('Missing seed id');
+
+      const seed = store.get(id);
+      if (!seed) return notFound(`Seed not found: ${id}`);
+
+      try {
+        const tree = this.behaviorEngine.fromSeed(seed);
+        const bb = new Blackboard();
+        bb.set('health', 100);
+        bb.set('energy', 80);
+        bb.set('threat_nearby', false);
+
+        const tickResult = tree.tick(bb);
+
+        return ok({
+          seedHash: seed.$hash,
+          seedName: seed.$name,
+          lastStatus: tickResult,
+          blackboardKeys: bb.keys(),
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Behavior generation failed';
+        return serverError(message);
+      }
+    });
+
+    // POST /api/seed/:id/tick — Simulate one AI tick for a seed's behavior
+    this.router.addRoute('POST', '/api/seed/:id/tick', (req) => {
+      const id = req.params['id'];
+      if (!id) return badRequest('Missing seed id');
+
+      const seed = store.get(id);
+      if (!seed) return notFound(`Seed not found: ${id}`);
+
+      const bbData = isRecord(req.body) ? req.body['blackboard'] : undefined;
+      const bb = new Blackboard();
+      if (isRecord(bbData)) {
+        for (const [k, v] of Object.entries(bbData)) {
+          bb.set(k, v);
+        }
+      } else {
+        bb.set('health', 100);
+        bb.set('energy', 80);
+        bb.set('threat_nearby', false);
+      }
+
+      const tree = this.behaviorEngine.fromSeed(seed);
+      const result = tree.tick(bb);
+
+      return ok({
+        seedHash: seed.$hash,
+        result,
+        blackboard: Object.fromEntries(bb.keys().map((k: string) => [k, bb.get(k)])),
+      });
+    });
+
+    // ── Generate Routes ──────────────────────────────────────
+
+    // POST /api/generate/name — Generate a Markov name
+    this.router.addRoute('POST', '/api/generate/name', (req) => {
+      const body = isRecord(req.body) ? req.body : {};
+      const count = numberField(body as Record<string, unknown>, 'count') ?? 5;
+      const minLength = numberField(body as Record<string, unknown>, 'minLength') ?? 3;
+      const maxLength = numberField(body as Record<string, unknown>, 'maxLength') ?? 12;
+
+      const gen = new MarkovNameGenerator(rng.fork('names'));
+      // Train on fantasy name corpus
+      gen.train([
+        'Aldric', 'Brynn', 'Corvus', 'Daelon', 'Eldara', 'Fenris', 'Gwendol',
+        'Hadrian', 'Isolde', 'Jareth', 'Kaelen', 'Lyra', 'Mordain', 'Nythara',
+        'Orion', 'Pyra', 'Quillan', 'Ravyn', 'Seraphim', 'Theron', 'Umbra',
+        'Vesper', 'Wynter', 'Xander', 'Ysolde', 'Zephyr', 'Ashara', 'Belmorn',
+        'Cindra', 'Duskweld', 'Emberwing', 'Frostlyn', 'Grimhold', 'Hawkblaze',
+        'Ironveil', 'Jadeclaw', 'Keldris', 'Luminar', 'Moonscar', 'Nethril',
+      ]);
+      const names: string[] = [];
+      for (let i = 0; i < Math.min(count, 50); i++) {
+        names.push(gen.generate(minLength, maxLength));
+      }
+      return ok({ names, count: names.length });
+    });
+
+    // POST /api/generate/noise — Generate 2D noise heightmap
+    this.router.addRoute('POST', '/api/generate/noise', (req) => {
+      const body = isRecord(req.body) ? req.body : {};
+      const width = numberField(body as Record<string, unknown>, 'width') ?? 32;
+      const height = numberField(body as Record<string, unknown>, 'height') ?? 32;
+      const scale = numberField(body as Record<string, unknown>, 'scale') ?? 0.1;
+      const octaves = numberField(body as Record<string, unknown>, 'octaves') ?? 4;
+
+      const noise = new NoiseGenerator(rng.fork('noise'));
+      const data: number[][] = [];
+      for (let y = 0; y < Math.min(height, 256); y++) {
+        const row: number[] = [];
+        for (let x = 0; x < Math.min(width, 256); x++) {
+          row.push(noise.fbm2D(x * scale, y * scale, octaves));
+        }
+        data.push(row);
+      }
+      return ok({ width, height, scale, octaves, data });
+    });
+
+    // POST /api/generate/content — Generate content from seed via content pipeline
+    this.router.addRoute('POST', '/api/generate/content', (req) => {
+      if (!isRecord(req.body)) return badRequest('Request body must be { hash: string }');
+      const hash = stringField(req.body, 'hash');
+      if (!hash) return badRequest('Field "hash" is required');
+
+      const seed = store.get(hash);
+      if (!seed) return notFound(`Seed not found: ${hash}`);
+
+      try {
+        const result = this.generateEngine.fromSeed(seed);
+        return created({ seedHash: hash, content: result });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Generation failed';
+        return serverError(message);
+      }
+    });
+
+    // ── Domain Engine Routes ─────────────────────────────────
+
+    // GET /api/engines — List all 24 domain engines
+    this.router.addRoute('GET', '/api/engines', () => {
+      return ok({ engines: this.engineRegistry.listEngines() });
+    });
+
+    // POST /api/engines/create — Create seed via domain engine
+    this.router.addRoute('POST', '/api/engines/create', (req) => {
+      if (!isRecord(req.body)) return badRequest('Request body required');
+      const domain = stringField(req.body, 'domain');
+      if (!domain) return badRequest('Field "domain" is required');
+
+      try {
+        const seed = this.engineRegistry.createForDomain(
+          domain as SeedDomain,
+          isRecord(req.body['params']) ? req.body['params'] as Record<string, unknown> : {},
+        );
+        store.set(seed.$hash, seed);
+        eventBus.emit({ type: 'seed.created', seed, timestamp: Date.now() });
+        return created({ seed });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Engine creation failed';
+        return serverError(message);
+      }
+    });
+
+    // POST /api/engines/evaluate — Evaluate seed via domain engine
+    this.router.addRoute('POST', '/api/engines/evaluate', (req) => {
+      if (!isRecord(req.body)) return badRequest('Request body required');
+      const hash = stringField(req.body, 'hash');
+      if (!hash) return badRequest('Field "hash" is required');
+
+      const seed = store.get(hash);
+      if (!seed) return notFound(`Seed not found: ${hash}`);
+
+      try {
+        const result = this.engineRegistry.evaluateSeed(seed);
+        return ok({ seedHash: hash, ...result });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Evaluation failed';
+        return serverError(message);
+      }
+    });
+
+    // GET /api/lineage/:hash — Ancestry tree for a seed
+    this.router.addRoute('GET', '/api/lineage/:hash', (req) => {
+      const hash = req.params['hash'];
+      if (!hash) return badRequest('Missing seed hash');
+
+      const seed = store.get(hash);
+      if (!seed) return notFound(`Seed not found: ${hash}`);
+
+      // Build lineage tree by following parent hashes
+      const lineage: Array<{ hash: string; name: string; generation: number; parents: string[] }> = [];
+      const visited = new Set<string>();
+      const queue = [seed];
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (visited.has(current.$hash)) continue;
+        visited.add(current.$hash);
+
+        lineage.push({
+          hash: current.$hash,
+          name: current.$name,
+          generation: current.$lineage.generation,
+          parents: current.$lineage.parents.map((p) => p.id),
+        });
+
+        // Try to find parents in store
+        for (const parent of current.$lineage.parents) {
+          const parentSeed = store.get(parent.id);
+          if (parentSeed && !visited.has(parentSeed.$hash)) {
+            queue.push(parentSeed);
+          }
+        }
+      }
+
+      return ok({ seedHash: hash, lineage });
+    });
+
+    // GET /api/search — Full-text seed search
+    this.router.addRoute('GET', '/api/search', (req) => {
+      const query = req.query['q']?.toLowerCase() ?? '';
+      const domainFilter = req.query['domain'];
+      const limit = parseInt(req.query['limit'] ?? '20', 10);
+      const offset = parseInt(req.query['offset'] ?? '0', 10);
+
+      if (query.length === 0) return badRequest('Query parameter "q" is required');
+
+      let results = Array.from(store.values()).filter((seed) => {
+        const nameMatch = seed.$name.toLowerCase().includes(query);
+        const domainMatch = seed.$domain.toLowerCase().includes(query);
+        const tagMatch = seed.$metadata.tags?.some((t) => t.toLowerCase().includes(query)) ?? false;
+        return nameMatch || domainMatch || tagMatch;
+      });
+
+      if (domainFilter) {
+        results = results.filter((s) => s.$domain === domainFilter);
+      }
+
+      const total = results.length;
+      const paged = results.slice(offset, offset + limit);
+
+      return ok({
+        items: paged,
+        total,
+        offset,
+        limit,
+        hasMore: offset + limit < total,
+      });
+    });
+
+    // GET /api/routes — List all registered routes (for OpenAPI discovery)
+    this.router.addRoute('GET', '/api/routes', () => {
+      return ok({ routes: this.router.getRoutes() });
+    });
+
+    // GET /api/diagnostics — Request logger stats and rate limiter status
+    this.router.addRoute('GET', '/api/diagnostics', () => {
+      return ok({
+        requests: {
+          total: this._requestLogger?.getTotalRequests() ?? 0,
+          avgDurationMs: this._requestLogger?.getAvgDurationMs() ?? 0,
+          recent: this._requestLogger?.getRecent(10) ?? [],
+        },
+        rateLimiter: {
+          trackedClients: this._rateLimiter?.getClientCount() ?? 0,
+        },
+        eventBus: {
+          totalEmitted: this.eventBus.totalEmitted,
+          registeredTypes: this.eventBus.getRegisteredTypes(),
+          metrics: Object.fromEntries(this.eventBus.getMetrics()),
+        },
+        uptime: Date.now() - this.startTime,
+      });
+    });
+
+    // ─── Entity Sprite Generation Routes ─────────────────
+    this.router.addRoute('POST', '/api/entity/generate-sprite', async (req) => {
+      if (!isRecord(req.body)) return badRequest('Body must be JSON with { conceptOrHash }');
+
+      try {
+        const { SpriteForgeIntegration } = await import('@paradigm/concept');
+        const forge = new SpriteForgeIntegration();
+
+        const available = await forge.isAvailable();
+        if (!available) {
+          return jsonResponse(503, { error: 'sprite_forge_unavailable', message: 'Sprite Forge server is not running at localhost:8000' });
+        }
+
+        // Get concept from request — either inline or from stored seed
+        const body = req.body as Record<string, unknown>;
+        let concept = body['concept'] as import('@paradigm/types').ConceptModel | undefined;
+
+        if (!concept) {
+          // Try to reconstruct from seed hash via pipeline
+          const hash = body['seedHash'] as string | undefined;
+          if (hash) {
+            const seed = store.get(hash);
+            if (seed) {
+              const { ConceptInterpreter } = await import('@paradigm/concept');
+              const interpreter = new ConceptInterpreter();
+              concept = interpreter.interpret(seed.$name);
+            }
+          }
+        }
+
+        if (!concept) return badRequest('Provide "concept" object or "seedHash" of an existing entity');
+
+        const result = await forge.generateFromConcept(concept);
+        return ok({ result });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Sprite generation failed';
+        return serverError(msg);
+      }
+    });
+
+    this.router.addRoute('GET', '/api/entity/sprite-forge-status', async () => {
+      try {
+        const { SpriteForgeIntegration } = await import('@paradigm/concept');
+        const forge = new SpriteForgeIntegration();
+        const available = await forge.isAvailable();
+        return ok({ available });
+      } catch {
+        return ok({ available: false });
+      }
+    });
+  }
+
+  /**
+   * Async factory: create a WebEngine with persistent storage.
+   * Uses StoreEngine.create() for auto-detected IndexedDB/SQLite persistence.
+   */
+  static async create(config?: Partial<ServerConfig>, rng?: DeterministicRNG): Promise<WebEngine> {
+    const eventBus = new EventBus({ maxReplaySize: 100 });
+    const storeEngine = await StoreEngine.create({
+      eventBus,
+      autoSaveIntervalMs: config?.autoSaveInterval ?? 500,
+    });
+    return new WebEngine(config, rng, storeEngine);
+  }
+
+  /** Gracefully shut down: flush pending writes to persistent storage. */
+  async shutdown(): Promise<void> {
+    if (this.store) {
+      await this.store.shutdown();
     }
   }
 
@@ -1374,7 +2139,55 @@ export class WebEngine {
       async (params: Record<string, unknown>) => {
         const name = String(params['name'] ?? 'Unnamed');
         const domain = String(params['domain'] ?? 'organism') as SeedDomain;
-        const genes: GeneMap = (params['genes'] as GeneMap) ?? WebEngine.deriveGenes(name, domain, rng);
+
+        // Detect complexity: if complex, use full enhanced pipeline with rich response
+        const complexityIndicators = ['shonen', 'seinen', 'chibi', 'ghibli', 'ufotable', 'trigger', 'kyoani', 'cartoon', 'looney', 'disney', 'pixel', 'realistic', 'photorealistic', 'cyberpunk', 'noir', 'fantasy', 'ki', 'chakra', 'nen', 'mana', 'kamehameha', 'bankai', 'beam', 'aura', 'transformation', 'super', 'saiyan', 'powers', 'dragon', 'phoenix', 'lich', 'celestial', 'eldritch'];
+        const words = name.toLowerCase().split(/\s+/);
+        const complexity = words.filter((w: string) => complexityIndicators.includes(w)).length * 0.2;
+
+        if (complexity >= 0.3 && !params['genes']) {
+          // Complex input: use enhanced pipeline, return full dimensions
+          try {
+            const enhanced = new EnhancedConceptPipeline();
+            const result = enhanced.execute(name, rng);
+            store.set(result.seed.$hash, result.seed);
+            eventBus.emit({ type: 'seed.created', seed: result.seed, timestamp: Date.now() });
+            const dims = result.dimensions;
+            return {
+              success: true,
+              message: `Created entity "${dims?.identity?.name ?? name}" — ${dims?.personality?.archetypeRole ?? 'unknown'} ${dims?.morphology?.bodyStructure ?? 'unknown'} (${dims?.visualStyle?.substyle ?? 'default'}), ${Object.keys(result.seed.genes).length} genes`,
+              data: {
+                ...result.seed,
+                _dimensions: result.dimensions,
+                _conceptGraph: result.conceptGraph,
+                _validation: { status: result.validationStatus, errors: result.validationErrors },
+              },
+              durationMs: 0,
+            };
+          } catch {
+            // Fall through to simple path
+          }
+        }
+
+        // Simple path
+        let genes: GeneMap;
+        if (params['genes']) {
+          genes = params['genes'] as GeneMap;
+        } else {
+          try {
+            const enhanced = new EnhancedConceptPipeline();
+            const result = enhanced.execute(name, rng);
+            genes = result.seed.genes;
+          } catch {
+            try {
+              const pipeline = new ConceptToEntityPipeline();
+              const blueprint = pipeline.execute(name, rng);
+              genes = blueprint.seed.genes;
+            } catch {
+              genes = WebEngine.deriveGenes(name, domain, rng);
+            }
+          }
+        }
         const seed = createSeed(name, domain, genes, rng);
         store.set(seed.$hash, seed);
         eventBus.emit({ type: 'seed.created', seed, timestamp: Date.now() });
@@ -1549,14 +2362,307 @@ export class WebEngine {
         };
       },
     );
+
+    // Tool: mutate_seed — matches intent.type "mutate"
+    this.agent.toolRegistry.register(
+      {
+        id: 'mutate_seed',
+        name: 'Mutate Seed',
+        description: 'Mutate an existing seed with a given intensity',
+        category: 'seed_management',
+        parameters: [
+          { name: 'hash', type: 'string', description: 'Hash of the seed to mutate', required: true },
+          { name: 'rate', type: 'number', description: 'Mutation rate 0-1', required: false },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const hash = String(params['hash'] ?? '');
+        const rate = Number(params['rate'] ?? 0.1);
+        const original = store.get(hash);
+        if (!original) return { success: false, message: `Seed not found: ${hash}`, durationMs: 0 };
+        const { mutateSeed: mut } = await import('@paradigm/seed');
+        const mutated = mut(original, Math.max(0, Math.min(1, rate)), rng);
+        store.set(mutated.$hash, mutated);
+        eventBus.emit({ type: 'seed.mutated', original, mutated, intensity: rate, timestamp: Date.now() });
+        return { success: true, message: `Mutated "${original.$name}" → "${mutated.$name}" (${mutated.$hash})`, data: mutated, durationMs: 0 };
+      },
+    );
+
+    // Tool: breed_seeds — matches intent.type "breed"
+    this.agent.toolRegistry.register(
+      {
+        id: 'breed_seeds',
+        name: 'Breed Seeds',
+        description: 'Breed two seeds together to create offspring',
+        category: 'seed_management',
+        parameters: [
+          { name: 'parent1', type: 'string', description: 'Hash of first parent', required: true },
+          { name: 'parent2', type: 'string', description: 'Hash of second parent', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const h1 = String(params['parent1'] ?? '');
+        const h2 = String(params['parent2'] ?? '');
+        const p1 = store.get(h1);
+        const p2 = store.get(h2);
+        if (!p1) return { success: false, message: `Parent 1 not found: ${h1}`, durationMs: 0 };
+        if (!p2) return { success: false, message: `Parent 2 not found: ${h2}`, durationMs: 0 };
+        const { breedSeeds: breed } = await import('@paradigm/seed');
+        const child = breed(p1, p2, 'uniform', 0.5, rng);
+        store.set(child.$hash, child);
+        eventBus.emit({ type: 'seed.bred', parentA: p1, parentB: p2, child, strategy: 'uniform', timestamp: Date.now() });
+        return { success: true, message: `Bred "${p1.$name}" + "${p2.$name}" → "${child.$name}"`, data: child, durationMs: 0 };
+      },
+    );
+
+    // Tool: delete_seed — matches intent.type "delete"
+    this.agent.toolRegistry.register(
+      {
+        id: 'delete_seed',
+        name: 'Delete Seed',
+        description: 'Remove a seed from the world',
+        category: 'seed_management',
+        parameters: [
+          { name: 'hash', type: 'string', description: 'Hash of seed to delete', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const hash = String(params['hash'] ?? '');
+        const seed = store.get(hash);
+        if (!seed) return { success: false, message: `Seed not found: ${hash}`, durationMs: 0 };
+        store.delete(hash);
+        eventBus.emit({ type: 'seed.died', seed, cause: 'agent_deleted', timestamp: Date.now() });
+        return { success: true, message: `Deleted seed "${seed.$name}"`, durationMs: 0 };
+      },
+    );
+
+    // Tool: search_seeds — matches intent.type "search"/"query"
+    this.agent.toolRegistry.register(
+      {
+        id: 'search_seeds',
+        name: 'Search Seeds',
+        description: 'Search seeds by name, domain, or tag',
+        category: 'seed_management',
+        parameters: [
+          { name: 'query', type: 'string', description: 'Search query', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const query = String(params['query'] ?? '').toLowerCase();
+        const allSeeds = Array.from(store.values());
+        const matches = allSeeds.filter((s) =>
+          s.$name.toLowerCase().includes(query) ||
+          s.$domain.toLowerCase().includes(query) ||
+          (s.$metadata.tags?.some((t) => t.toLowerCase().includes(query)) ?? false)
+        );
+        return {
+          success: true,
+          message: `Found ${matches.length} seed(s) matching "${query}"`,
+          data: matches.map((s) => ({ hash: s.$hash, name: s.$name, domain: s.$domain, fitness: s.$fitness?.primary })),
+          durationMs: 0,
+        };
+      },
+    );
+
+    // Tool: export_seeds — matches intent.type "export"
+    this.agent.toolRegistry.register(
+      {
+        id: 'export_seeds',
+        name: 'Export Seeds',
+        description: 'Export all seeds as JSON',
+        category: 'seed_management',
+        parameters: [],
+      },
+      async () => {
+        const allSeeds = Array.from(store.values());
+        return {
+          success: true,
+          message: `Exported ${allSeeds.length} seed(s)`,
+          data: { count: allSeeds.length, seeds: allSeeds },
+          durationMs: 0,
+        };
+      },
+    );
+
+    // Tool: analyze_concept — runs ISCA analysis on text
+    this.agent.toolRegistry.register(
+      {
+        id: 'analyze_concept',
+        name: 'Analyze Concept',
+        description: 'Analyze a character concept to extract archetype, body structure, abilities, and style',
+        category: 'seed_management',
+        parameters: [
+          { name: 'description', type: 'string', description: 'Character description to analyze', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const desc = String(params['description'] ?? '');
+        const { ISCAAnalyzer } = await import('@paradigm/concept');
+        const isca = new ISCAAnalyzer();
+        const result = isca.analyze(desc);
+        return {
+          success: true,
+          message: `Concept: ${result.archetype} (${result.bodyStructure}), elements: [${result.elements.join(', ')}], animations: [${result.suggestedAnimations.join(', ')}]`,
+          data: result,
+          durationMs: 0,
+        };
+      },
+    );
+
+    // Tool: create_entity — v2 Enhanced pipeline with ontology, power system, 12 dimensions
+    this.agent.toolRegistry.register(
+      {
+        id: 'create_entity',
+        name: 'Create Entity',
+        description: 'Create a living entity from a concept description with full ontology analysis, power system, transformations, and 12-dimension character decomposition',
+        category: 'seed_management',
+        parameters: [
+          { name: 'description', type: 'string', description: 'Entity concept description', required: true },
+          { name: 'style', type: 'string', description: 'Visual style override', required: false },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const desc = String(params['description'] ?? '');
+        const styleParam = params['style'] as string | undefined;
+        const enhanced = new EnhancedConceptPipeline();
+        const result = enhanced.execute(desc, rng, { style: styleParam as import('@paradigm/types').StyleType });
+        // Store the seed
+        store.set(result.seed.$hash, result.seed);
+        eventBus.emit({ type: 'seed.created', seed: result.seed, timestamp: Date.now() });
+
+        const dims = result.dimensions;
+        const style = dims?.visualStyle?.substyle ?? 'default';
+        const power = result.conceptGraph?.powerSystem;
+        const transforms = result.conceptGraph?.transformations?.length ?? 0;
+
+        return {
+          success: true,
+          message: `Created entity "${dims?.identity?.name ?? desc}" — ${dims?.personality?.archetypeRole ?? 'unknown'} ${dims?.morphology?.bodyStructure ?? 'unknown'} (${style})` +
+            (power?.expression ? `, power: ${power.expression.manifestationType}/${power.expression.range}` : '') +
+            (transforms > 0 ? `, ${transforms} transformation(s)` : '') +
+            `, ${Object.keys(result.seed.genes).length} genes, validation: ${result.validationStatus}`,
+          data: {
+            seed: result.seed,
+            dimensions: result.dimensions,
+            conceptGraph: result.conceptGraph,
+            validation: { status: result.validationStatus, errors: result.validationErrors },
+          },
+          durationMs: 0,
+        };
+      },
+    );
+
+    // Tool: co_create — entity modifies its own DNA
+    this.agent.toolRegistry.register(
+      {
+        id: 'co_create',
+        name: 'Co-Create',
+        description: 'Tell an entity to modify itself. E.g., "make it more intimidating" or "add wings".',
+        category: 'seed_management',
+        parameters: [
+          { name: 'hash', type: 'string', description: 'Seed hash of entity to modify', required: true },
+          { name: 'message', type: 'string', description: 'What to change about the entity', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const hash = String(params['hash'] ?? '');
+        const message = String(params['message'] ?? '');
+        const seed = store.get(hash);
+        if (!seed) return { success: false, message: `Seed not found: ${hash}`, durationMs: 0 };
+        const { AgenticCoCreator } = await import('@paradigm/concept');
+        const creator = new AgenticCoCreator();
+        const result = creator.process(seed, message);
+        store.set(result.modifiedSeed.$hash, result.modifiedSeed);
+        eventBus.emit({ type: 'seed.created', seed: result.modifiedSeed, timestamp: Date.now() });
+        return { success: true, message: result.explanation, data: { modifiedHash: result.modifiedSeed.$hash, mutations: result.appliedMutations.length }, durationMs: 0 };
+      },
+    );
+
+    // Tool: create_world — procedural world generation
+    this.agent.toolRegistry.register(
+      {
+        id: 'create_world',
+        name: 'Create World',
+        description: 'Generate a seed-driven procedural world with zones, NPCs, and narrative',
+        category: 'seed_management',
+        parameters: [
+          { name: 'seed', type: 'string', description: 'Seed string for deterministic world generation', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const seedStr = String(params['seed'] ?? `world_${Date.now()}`);
+        const { WorldGenerator } = await import('@paradigm/worlds');
+        const gen = new WorldGenerator();
+        const world = gen.generate(seedStr);
+        return {
+          success: true,
+          message: `Created "${world.narrative.worldName}" — ${world.biome} biome, ${world.zones.length} zones, ${world.npcs.length} NPCs. Mystery: ${world.narrative.mysteryName}`,
+          data: world,
+          durationMs: 0,
+        };
+      },
+    );
+
+    // Tool: recommend_strategy — meta-learning recommendation
+    this.agent.toolRegistry.register(
+      {
+        id: 'recommend_strategy',
+        name: 'Recommend Strategy',
+        description: 'Get meta-learning recommendation for evolution strategy in a domain',
+        category: 'seed_management',
+        parameters: [
+          { name: 'domain', type: 'string', description: 'Domain to get recommendation for', required: true },
+        ],
+      },
+      async (params: Record<string, unknown>) => {
+        const domain = String(params['domain'] ?? 'organism');
+        const { MetaLearningCoordinator } = await import('@paradigm/meta');
+        const coord = new MetaLearningCoordinator();
+        const rec = coord.recommend(domain);
+        return {
+          success: true,
+          message: `Recommended for ${domain}: mutation rate ${rec.recommendedMutationRate}, population ${rec.recommendedPopulationSize}, strategy ${rec.recommendedStrategy} (confidence: ${(rec.confidence * 100).toFixed(0)}%)`,
+          data: rec,
+          durationMs: 0,
+        };
+      },
+    );
   }
 
   /**
    * Main entry point for processing requests.
-   * Delegates to the router which matches and dispatches to the appropriate controller.
+   * Wraps the router with rate limiting, timing, and structured error handling.
    */
-  async handle(req: Request): Promise<Response> {
-    return this.router.handle(req);
+  async handle(req: Request, clientId?: string): Promise<Response> {
+    const start = performance.now();
+
+    // Rate limiting
+    if (this._rateLimiter && clientId) {
+      const isAgentRoute = req.path.startsWith('/api/chat') || req.path.startsWith('/api/agent');
+      const limiter = isAgentRoute ? this._agentRateLimiter : this._rateLimiter;
+      if (limiter) {
+        const check = limiter.check(clientId);
+        if (!check.allowed) {
+          return jsonResponse(429, formatRateLimitError(check.retryAfterMs));
+        }
+      }
+    }
+
+    const response = await this.router.handle(req);
+
+    // Log request
+    if (this._requestLogger) {
+      this._requestLogger.record({
+        method: req.method,
+        path: req.path,
+        status: response.status,
+        durationMs: performance.now() - start,
+        timestamp: Date.now(),
+        clientId,
+      });
+    }
+
+    return response;
   }
 
   /** Get a summary of the current engine status. */
@@ -1571,7 +2677,17 @@ export class WebEngine {
   }
 
   /** Access the seed store directly (for testing and integration). */
-  getSeedStore(): Map<string, UniversalSeed> {
+  getSeedStore(): PersistentSeedMap | Map<string, UniversalSeed> {
     return this.seedController.getStore();
+  }
+
+  /** Access the rate limiter (for diagnostics). */
+  get rateLimiter(): RateLimiter | null {
+    return this._rateLimiter;
+  }
+
+  /** Access the request logger (for diagnostics). */
+  get requestLogger(): RequestLogger | null {
+    return this._requestLogger;
   }
 }

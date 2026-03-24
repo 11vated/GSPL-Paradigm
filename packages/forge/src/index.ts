@@ -9,7 +9,7 @@
  */
 
 import type { UniversalSeed, Gene } from '@paradigm/types';
-import { DeterministicRNG } from '@paradigm/rng';
+import { DeterministicRNG, generatePalette, srgbToHex } from '@paradigm/rng';
 
 // ─────────────────────────────────────────────
 // Core Types
@@ -36,7 +36,8 @@ export type ArtifactType =
   | 'particle_config'
   | 'soundtrack'
   | 'sound_effect'
-  | 'physics_sim';
+  | 'physics_sim'
+  | 'sprite_entity';
 
 /** Options controlling artifact generation. */
 export interface ForgeOptions {
@@ -130,37 +131,43 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
 
-/** Convert HSL (h: 0-360, s: 0-100, l: 0-100) to hex color string. */
-function hslToHex(h: number, s: number, l: number): string {
-  const sl = s / 100;
-  const ll = l / 100;
-  const a = sl * Math.min(ll, 1 - ll);
-  const f = (n: number): string => {
-    const k = (n + h / 30) % 12;
-    const color = ll - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color)
-      .toString(16)
-      .padStart(2, '0');
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-/** Derive a color palette from a seed using gene values. */
+/**
+ * Derive a perceptually uniform color palette from a seed using OKLab color science.
+ * Uses K-means++ in OKLab space via @paradigm/rng for maximally distinct colors.
+ */
 function deriveColors(
   seed: UniversalSeed,
-  rng: DeterministicRNG,
+  _rng: DeterministicRNG,
 ): { primary: string; secondary: string; accent: string; background: string; text: string } {
-  const vectors = collectVectors(seed);
-  const baseHue = vectors.length > 0 ? ((vectors[0] ?? rng.next()) * 360) % 360 : rng.next() * 360;
-  const saturation = vectors.length > 1 ? clamp((vectors[1] ?? 0.6) * 100, 40, 90) : 65;
-  const lightness = vectors.length > 2 ? clamp((vectors[2] ?? 0.5) * 100, 30, 70) : 50;
+  // Generate 5 perceptually distinct colors from seed hash
+  const palette = generatePalette(seed.$hash, 5, {
+    minLightness: 0.35,
+    maxLightness: 0.75,
+    minChroma: 0.06,
+    maxChroma: 0.18,
+  });
+
+  // Generate background (high lightness, low chroma) and text (low lightness)
+  const bgPalette = generatePalette(`${seed.$hash}:bg`, 2, {
+    minLightness: 0.92,
+    maxLightness: 0.97,
+    minChroma: 0.01,
+    maxChroma: 0.03,
+  });
+
+  const textPalette = generatePalette(`${seed.$hash}:text`, 2, {
+    minLightness: 0.1,
+    maxLightness: 0.2,
+    minChroma: 0.01,
+    maxChroma: 0.03,
+  });
 
   return {
-    primary: hslToHex(baseHue, saturation, lightness),
-    secondary: hslToHex((baseHue + 30) % 360, saturation - 10, lightness + 10),
-    accent: hslToHex((baseHue + 180) % 360, saturation, lightness),
-    background: hslToHex(baseHue, 10, 95),
-    text: hslToHex(baseHue, 10, 15),
+    primary: srgbToHex(palette[0] ?? { r: 0.4, g: 0.7, b: 0.5 }),
+    secondary: srgbToHex(palette[1] ?? { r: 0.5, g: 0.6, b: 0.7 }),
+    accent: srgbToHex(palette[2] ?? { r: 0.7, g: 0.4, b: 0.6 }),
+    background: srgbToHex(bgPalette[0] ?? { r: 0.95, g: 0.95, b: 0.96 }),
+    text: srgbToHex(textPalette[0] ?? { r: 0.12, g: 0.12, b: 0.15 }),
   };
 }
 
@@ -713,10 +720,10 @@ export class DesignForger implements ForgerStrategy {
         accent: colors.accent,
         background: colors.background,
         text: colors.text,
-        success: hslToHex(120, 50, 45),
-        warning: hslToHex(45, 90, 50),
-        error: hslToHex(0, 75, 50),
-        info: hslToHex(210, 70, 50),
+        success: '#22c55e',
+        warning: '#f59e0b',
+        error: '#ef4444',
+        info: '#3b82f6',
         ...shadeEntries,
       },
       scalars: scalars.slice(0, 8).reduce<Record<string, number>>((acc, v, i) => {
@@ -1616,6 +1623,90 @@ export class AudioForger implements ForgerStrategy {
 // ─────────────────────────────────────────────
 
 /** Master artifact router. Dispatches forge requests to specialized forgers. */
+/**
+ * EntitySpriteForger — Generates sprite entity blueprints from seeds.
+ * Extracts morphology, style, and ability genes to produce a structured
+ * JSON artifact describing the entity's visual and behavioral properties.
+ */
+export class EntitySpriteForger implements ForgerStrategy {
+  readonly name = 'EntitySpriteForger';
+  readonly supportedTypes: ArtifactType[] = ['sprite_entity'];
+
+  canForge(type: ArtifactType): boolean {
+    return type === 'sprite_entity';
+  }
+
+  forge(seed: UniversalSeed, options: ForgeOptions): Artifact {
+    const rng = new DeterministicRNG(seed.$hash);
+
+    // Extract concept genes from seed
+    const archetype = getStringGene(seed, 'archetype', 'unknown');
+    const bodyStructure = getStringGene(seed, 'bodyStructure', 'humanoid');
+    const style = getStringGene(seed, 'style', 'default');
+    const species = getStringGene(seed, 'species', 'unknown');
+    const exaggeration = getNumericGene(seed, 'exaggeration', 0.5);
+
+    const proportions = getVectorGene(seed, 'proportions', [0.2, 0.6, 1.2, 0.2]);
+    const palette = getVectorGene(seed, 'palette', []);
+    const personality = getVectorGene(seed, 'personality', []);
+
+    // Determine frame size from body structure
+    const frameSizes: Record<string, [number, number]> = {
+      humanoid: [64, 64], quadruped: [96, 64], winged: [128, 128],
+      serpentine: [96, 48], floating: [64, 64], amorphous: [48, 48],
+    };
+    const [fw, fh] = frameSizes[bodyStructure] ?? [64, 64];
+
+    // Build entity descriptor
+    const entity = {
+      name: seed.$name,
+      hash: seed.$hash,
+      archetype,
+      bodyStructure,
+      style,
+      species,
+      exaggeration,
+      proportions: {
+        headToBodyRatio: proportions[0] ?? 0.2,
+        limbToBodyRatio: proportions[1] ?? 0.6,
+        shoulderToHipRatio: proportions[2] ?? 1.2,
+        eyeToHeadRatio: proportions[3] ?? 0.2,
+      },
+      palette: this.buildPaletteHex(palette),
+      personality: personality.length >= 10 ? {
+        openness: personality[0], conscientiousness: personality[1],
+        extraversion: personality[2], agreeableness: personality[3],
+        neuroticism: personality[4], wit: personality[5],
+        cunning: personality[6], courage: personality[7],
+        loyalty: personality[8], adaptability: personality[9],
+      } : undefined,
+      spriteConfig: { frameWidth: fw, frameHeight: fh, fps: 12 },
+      fitness: seed.$fitness?.primary ?? 0,
+      generation: seed.$lineage.generation,
+    };
+
+    const content = JSON.stringify(entity, null, 2);
+    return makeArtifact(
+      'sprite_entity',
+      `${seed.$name} Entity`,
+      content,
+      'application/json',
+      { archetype, bodyStructure, style, species },
+    );
+  }
+
+  private buildPaletteHex(values: number[]): string[] {
+    const colors: string[] = [];
+    for (let i = 0; i + 2 < values.length; i += 3) {
+      const r = Math.round((values[i] ?? 0) * 255);
+      const g = Math.round((values[i + 1] ?? 0) * 255);
+      const b = Math.round((values[i + 2] ?? 0) * 255);
+      colors.push(`#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`);
+    }
+    return colors;
+  }
+}
+
 export class Forge {
   private readonly forgers: ForgerStrategy[];
   private readonly rng: DeterministicRNG;
@@ -1629,6 +1720,7 @@ export class Forge {
       new CreativeForger(),
       new AssetForger(),
       new AudioForger(),
+      new EntitySpriteForger(),
     ];
   }
 

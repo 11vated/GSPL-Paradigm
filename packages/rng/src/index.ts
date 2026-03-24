@@ -456,3 +456,26 @@ export class WallClockSimulationClock implements SimulationClock {
     return new WallClockSimulationClock();
   }
 }
+
+// ─────────────────────────────────────────────
+// OKLab Color Science — Re-export
+// ─────────────────────────────────────────────
+
+export {
+  srgbToOklab,
+  oklabToSrgb,
+  srgbToOklch,
+  oklchToSrgb,
+  oklabLerp,
+  oklabDistance,
+  generatePalette,
+  generateHueShiftedRamp,
+  srgbToHex,
+  hexToSrgb,
+} from './oklab.js';
+
+export type {
+  OkLabColor,
+  SrgbColor,
+  OkLchColor,
+} from './oklab.js';

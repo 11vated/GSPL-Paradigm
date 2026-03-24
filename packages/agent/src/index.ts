@@ -1010,6 +1010,354 @@ export class GSPLAgent {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// v2: ONTOLOGY-BASED COGNITION LAYER
+// ═══════════════════════════════════════════════════════════════════
+
+import { OntologyEngine } from '@paradigm/ontology';
+import type { ComposedConcept } from '@paradigm/ontology';
+import { EnhancedConceptPipeline } from '@paradigm/concept';
+import type { EntityBlueprintV2, CharacterDimension, PowerSystem, Transformation } from '@paradigm/types';
+
+/** Result of the agent's concept reasoning process. */
+export interface ConceptReasoningResult {
+  readonly ontologyAnalysis: ComposedConcept;
+  readonly implications: readonly string[];
+  readonly emergentProperties: readonly string[];
+  readonly conflicts: readonly string[];
+  readonly suggestions: readonly string[];
+  readonly qualityScore: number;
+}
+
+/**
+ * ConceptReasoner — Traverses the ontology to deeply understand any concept.
+ * This IS the agent's knowledge — not a wrapper, but the intelligence itself.
+ */
+export class ConceptReasoner {
+  private readonly ontology: OntologyEngine;
+
+  constructor(ontology?: OntologyEngine) {
+    this.ontology = ontology ?? new OntologyEngine();
+  }
+
+  /** Deep concept analysis — what IS this concept? What does it IMPLY? What CONFLICTS? What EMERGES? */
+  reason(input: string): ConceptReasoningResult {
+    const analysis = this.ontology.analyze(input);
+    const implications: string[] = [];
+    const suggestions: string[] = [];
+
+    // Derive implications from species
+    if (analysis.species) {
+      const speciesDefaults = this.ontology.species.resolve(analysis.species);
+      if (speciesDefaults) {
+        implications.push(`Species "${analysis.species}" implies ${speciesDefaults.bodyStructure} body, default animations: ${speciesDefaults.defaultAnimations.join(', ')}`);
+        if (speciesDefaults.compatibleElements.length > 0) {
+          implications.push(`Compatible elements: ${speciesDefaults.compatibleElements.join(', ')}`);
+        }
+      }
+    }
+
+    // Derive implications from archetype
+    if (analysis.archetype) {
+      const archDefaults = this.ontology.archetypes.resolve(analysis.archetype);
+      if (archDefaults) {
+        implications.push(`Archetype "${analysis.archetype}" implies ${archDefaults.visualDesignLanguage} visual language`);
+        if (archDefaults.abilityAffinities.length > 0) {
+          implications.push(`Ability affinities: ${archDefaults.abilityAffinities.join(', ')}`);
+        }
+      }
+    }
+
+    // Check element interactions
+    if (analysis.elements.length >= 2) {
+      const elemA = this.ontology.elements.get(analysis.elements[0]!);
+      const elemB = this.ontology.elements.get(analysis.elements[1]!);
+      if (elemA && elemB) {
+        const aWeakness = elemA.defaults.weakness;
+        const bWeakness = elemB.defaults.weakness;
+        if (aWeakness.includes(analysis.elements[1]!) || bWeakness.includes(analysis.elements[0]!)) {
+          suggestions.push(`Elements ${analysis.elements[0]} and ${analysis.elements[1]} have a weakness relationship — consider which dominates`);
+        }
+      }
+    }
+
+    // Style implications
+    if (analysis.style) {
+      const styleDefaults = this.ontology.styles.resolve(analysis.style);
+      if (styleDefaults) {
+        implications.push(`Style "${analysis.style}" uses ${styleDefaults.shadingMethod} shading at ${styleDefaults.animationFrameRate}fps, exaggeration: ${styleDefaults.exaggerationScale}x`);
+      }
+    }
+
+    // Proactive suggestions
+    if (analysis.species && !analysis.archetype) {
+      suggestions.push(`No archetype detected — consider adding a role (warrior, mage, rogue, etc.) for richer behavior`);
+    }
+    if (analysis.archetype && analysis.elements.length === 0) {
+      suggestions.push(`No elemental affinity detected — adding an element would enhance visual effects and abilities`);
+    }
+    if (!analysis.style) {
+      suggestions.push(`No visual style specified — defaulting to standard. Consider: anime, chibi, pixel, realistic, cyberpunk`);
+    }
+
+    // Quality score based on completeness
+    let quality = 0;
+    if (analysis.species) quality += 0.2;
+    if (analysis.archetype) quality += 0.2;
+    if (analysis.elements.length > 0) quality += 0.15;
+    if (analysis.style) quality += 0.15;
+    if (analysis.abilities.length > 0) quality += 0.15;
+    if (analysis.materials.length > 0) quality += 0.1;
+    if (analysis.emergentProperties.length > 0) quality += 0.05;
+
+    return {
+      ontologyAnalysis: analysis,
+      implications,
+      emergentProperties: [...analysis.emergentProperties],
+      conflicts: analysis.conflicts.map(c => c.description),
+      suggestions,
+      qualityScore: Math.min(quality, 1),
+    };
+  }
+
+  getOntology(): OntologyEngine {
+    return this.ontology;
+  }
+}
+
+/**
+ * CreativeSynthesizer — Blends concepts and discovers novel combinations.
+ * The agent's creative engine — finds unexplored regions of concept space.
+ */
+export class CreativeSynthesizer {
+  private readonly reasoner: ConceptReasoner;
+
+  constructor(reasoner: ConceptReasoner) {
+    this.reasoner = reasoner;
+  }
+
+  /** Blend two concepts together and discover what emerges. */
+  blend(conceptA: string, conceptB: string): {
+    readonly blendedDescription: string;
+    readonly analysis: ConceptReasoningResult;
+    readonly noveltyScore: number;
+  } {
+    const blended = `${conceptA} ${conceptB}`;
+    const analysis = this.reasoner.reason(blended);
+
+    // Novelty = emergent properties discovered
+    const novelty = Math.min(1, analysis.emergentProperties.length * 0.3 + (analysis.ontologyAnalysis.abilities.length > 0 ? 0.2 : 0));
+
+    return {
+      blendedDescription: blended,
+      analysis,
+      noveltyScore: novelty,
+    };
+  }
+
+  /** Generate a rival/counterpart for a given concept. */
+  generateRival(concept: string): string {
+    const analysis = this.reasoner.reason(concept);
+    const ont = this.reasoner.getOntology();
+
+    // Find opposing elements
+    const elements = analysis.ontologyAnalysis.elements;
+    const opposites: string[] = [];
+    for (const elem of elements) {
+      const node = ont.elements.get(elem);
+      if (node) {
+        opposites.push(...node.defaults.weakness);
+      }
+    }
+
+    const rivalElement = opposites[0] ?? 'dark';
+    const rivalArchetype = analysis.ontologyAnalysis.archetype === 'warrior' ? 'rogue'
+      : analysis.ontologyAnalysis.archetype === 'mage' ? 'berserker'
+      : analysis.ontologyAnalysis.archetype === 'rogue' ? 'knight'
+      : 'warrior';
+
+    return `${rivalElement} ${rivalArchetype} ${analysis.ontologyAnalysis.species ?? 'humanoid'}`;
+  }
+
+  /** Suggest unexplored concept combinations. */
+  suggestNovel(recentConcepts: readonly string[]): string[] {
+    const suggestions: string[] = [];
+    const ont = this.reasoner.getOntology();
+
+    // Find species not recently used
+    const recentSpecies = new Set<string>();
+    for (const c of recentConcepts) {
+      const a = ont.analyze(c);
+      if (a.species) recentSpecies.add(a.species);
+    }
+
+    const allSpecies = ont.species.all().filter(n => !recentSpecies.has(n.id) && n.parent !== null);
+    if (allSpecies.length > 0) {
+      const elements = ont.elements.all();
+      const styles = ont.styles.all().filter(s => s.parent !== null);
+
+      // Generate 3 random novel combos
+      for (let i = 0; i < Math.min(3, allSpecies.length); i++) {
+        const sp = allSpecies[i % allSpecies.length]!;
+        const el = elements[i % elements.length]!;
+        const st = styles[i % styles.length]!;
+        suggestions.push(`${st.keywords[0] ?? st.name} ${el.keywords[0] ?? el.name} ${sp.keywords[0] ?? sp.name}`);
+      }
+    }
+
+    return suggestions;
+  }
+}
+
+/**
+ * QualityJudge — Validates entities against constraint rules and aesthetic standards.
+ * The agent's judgment — ensures every output is production-ready.
+ */
+export class QualityJudge {
+  /** Score an entity blueprint on multiple quality dimensions. */
+  judge(blueprint: EntityBlueprintV2): {
+    readonly overallScore: number;
+    readonly dimensions: Record<string, number>;
+    readonly critique: readonly string[];
+    readonly improvements: readonly string[];
+  } {
+    const dims: Record<string, number> = {};
+    const critique: string[] = [];
+    const improvements: string[] = [];
+
+    // Completeness: how many dimensions are populated?
+    const d = blueprint.dimensions;
+    let populated = 0;
+    if (d?.identity) populated++;
+    if (d?.morphology) populated++;
+    if (d?.appearance) populated++;
+    if (d?.personality) populated++;
+    if (d?.powerSystem) populated++;
+    if (d?.visualStyle) populated++;
+    if (d?.movement) populated++;
+    if (d?.animationComplexity) populated++;
+    dims['completeness'] = populated / 8;
+
+    // Coherence: do elements align?
+    if (blueprint.validationErrors.length === 0) {
+      dims['coherence'] = 1.0;
+    } else {
+      dims['coherence'] = Math.max(0, 1 - blueprint.validationErrors.length * 0.2);
+      for (const err of blueprint.validationErrors) {
+        critique.push(err);
+      }
+    }
+
+    // Visual richness: genes count indicates detail
+    const geneCount = Object.keys(blueprint.seed.genes).length;
+    dims['detail'] = Math.min(1, geneCount / 18);
+
+    // Power system depth
+    if (d?.powerSystem?.progression?.stages?.length) {
+      dims['powerDepth'] = Math.min(1, d.powerSystem.progression.stages.length / 5);
+    } else {
+      dims['powerDepth'] = 0;
+      improvements.push('Add a power system with progression stages for deeper gameplay potential');
+    }
+
+    // Style specificity
+    if (d?.visualStyle?.substyle && d.visualStyle.substyle !== 'default') {
+      dims['styleSpecificity'] = 1.0;
+    } else {
+      dims['styleSpecificity'] = 0.3;
+      improvements.push('Specify a visual substyle (shonen, ufotable, ghibli, etc.) for distinct rendering');
+    }
+
+    const values = Object.values(dims);
+    const overall = values.reduce((a, b) => a + b, 0) / values.length;
+
+    return { overallScore: overall, dimensions: dims, critique, improvements };
+  }
+}
+
+/**
+ * Enhanced GSPLAgent with v2 cognition — ontology-based reasoning,
+ * creative synthesis, quality judgment, and proactive suggestions.
+ */
+export class EnhancedGSPLAgent extends GSPLAgent {
+  readonly conceptReasoner: ConceptReasoner;
+  readonly synthesizer: CreativeSynthesizer;
+  readonly qualityJudge: QualityJudge;
+  private readonly enhancedPipeline: EnhancedConceptPipeline;
+  private readonly recentConcepts: string[] = [];
+
+  constructor(config: GSPLAgentConfig = {}) {
+    super(config);
+    this.conceptReasoner = new ConceptReasoner();
+    this.synthesizer = new CreativeSynthesizer(this.conceptReasoner);
+    this.qualityJudge = new QualityJudge();
+    this.enhancedPipeline = new EnhancedConceptPipeline(this.conceptReasoner.getOntology());
+  }
+
+  /** Enhanced process with ontology cognition. */
+  async processEnhanced(input: string, rng: DeterministicRNG): Promise<AgentResponse & {
+    reasoning: ConceptReasoningResult;
+    blueprint?: EntityBlueprintV2;
+    quality?: ReturnType<QualityJudge['judge']>;
+    proactiveSuggestions?: readonly string[];
+  }> {
+    // Step 1: Deep concept reasoning through ontology
+    const reasoning = this.conceptReasoner.reason(input);
+
+    // Step 2: Run base agent pipeline
+    const baseResponse = await this.process(input);
+
+    // Step 3: If this was a create intent, run enhanced compilation + quality check
+    let blueprint: EntityBlueprintV2 | undefined;
+    let quality: ReturnType<QualityJudge['judge']> | undefined;
+
+    const intentType = baseResponse.intent?.type;
+
+    if (intentType === 'create') {
+      try {
+        blueprint = this.enhancedPipeline.execute(input, rng);
+        quality = this.qualityJudge.judge(blueprint);
+      } catch {
+        // Concept compilation is optional enrichment — don't fail the whole response
+      }
+    }
+
+    // Step 4: Track for creative suggestions
+    this.recentConcepts.push(input);
+    if (this.recentConcepts.length > 20) this.recentConcepts.shift();
+
+    // Step 5: Proactive suggestions
+    const proactiveSuggestions: string[] = [...reasoning.suggestions];
+
+    // After creating a hero, suggest a rival
+    if (intentType === 'create' && reasoning.ontologyAnalysis.archetype) {
+      const rival = this.synthesizer.generateRival(input);
+      proactiveSuggestions.push(`This entity would benefit from a rival. Try: "${rival}"`);
+    }
+
+    // Suggest novel concepts periodically
+    if (this.recentConcepts.length >= 3 && this.recentConcepts.length % 3 === 0) {
+      const novel = this.synthesizer.suggestNovel(this.recentConcepts);
+      if (novel.length > 0) {
+        proactiveSuggestions.push(`Unexplored concepts: ${novel.join(', ')}`);
+      }
+    }
+
+    return {
+      ...baseResponse,
+      reasoning,
+      blueprint,
+      quality,
+      proactiveSuggestions,
+    };
+  }
+
+  /** Get ontology stats. */
+  getOntologyStats(): Record<string, number> {
+    return this.conceptReasoner.getOntology().stats();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Re-exports for convenience
 // ═══════════════════════════════════════════════════════════════════
 

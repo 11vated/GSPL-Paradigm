@@ -1,0 +1,21 @@
+@gseed 1.0
+@domain organism
+@ecosystem fantasy
+
+seed "Fire Dragon" organism {
+  health: scalar(250, 0, 500);
+  attack: scalar(85, 0, 100);
+  defense: scalar(60, 0, 100);
+  speed: scalar(45, 0, 100);
+  intelligence: scalar(70, 0, 100);
+  role: categorical("predator", ["predator", "prey", "neutral", "boss"]);
+  element: categorical("fire", ["fire", "ice", "lightning", "shadow", "nature"]);
+  size: scalar(3.5, 0.1, 10);
+  color: vector([0.9, 0.2, 0.1]);
+  position: vector([0, 0, 0]);
+  territory_radius: scalar(50, 5, 200);
+  breath_range: scalar(15, 1, 30);
+  breath_damage: scalar(40, 0, 100);
+  flight_speed: scalar(70, 0, 100);
+  armor_rating: scalar(45, 0, 100);
+}

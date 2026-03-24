@@ -18,14 +18,31 @@
   },
   "dependencies": {
     "@paradigm/agent": "workspace:*",
+    "@paradigm/behavior": "workspace:*",
+    "@paradigm/concept": "workspace:*",
+    "@paradigm/engines": "workspace:*",
+    "@paradigm/fields": "workspace:*",
+    "@paradigm/generate": "workspace:*",
+    "@paradigm/lang": "workspace:*",
+    "@paradigm/meta": "workspace:*",
+    "@paradigm/runtime": "workspace:*",
+    "@paradigm/worlds": "workspace:*",
     "@paradigm/events": "workspace:*",
+    "@paradigm/evolution": "workspace:*",
+    "@paradigm/export": "workspace:*",
     "@paradigm/forge": "workspace:*",
+    "@paradigm/renderer": "workspace:*",
     "@paradigm/rng": "workspace:*",
     "@paradigm/seed": "workspace:*",
-    "@paradigm/types": "workspace:*"
+    "@paradigm/sprites": "workspace:*",
+    "@paradigm/store": "workspace:*",
+    "@paradigm/types": "workspace:*",
+    "ws": "^8.20.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
